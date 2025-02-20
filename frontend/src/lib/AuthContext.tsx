@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { User, signInWithPopup, signOut, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth'
+import { User, signInWithPopup, signOut, GoogleAuthProvider, setPersistence, browserLocalPersistence, browserPopupRedirectResolver } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
 
 interface AuthContextType {
@@ -42,11 +42,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       // Configure el proveedor de Google
       googleProvider.setCustomParameters({
-        prompt: 'select_account'
+        prompt: 'select_account',
+        display: 'popup'
       })
 
-      // Intenta el inicio de sesión con popup
-      const result = await signInWithPopup(auth, googleProvider)
+      // Intenta el inicio de sesión con popup usando el resolver específico
+      const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver)
       if (!result.user) {
         throw new Error('No user data received')
       }
@@ -56,6 +57,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         alert('Please allow popups for this website to sign in with Google')
       } else if (error.code === 'auth/cancelled-popup-request') {
         console.log('Sign-in popup was closed by the user')
+      } else if (error.code === 'auth/unauthorized-domain') {
+        console.error('Domain not authorized. Please check Firebase Console settings.')
       } else {
         alert('Error signing in with Google. Please try again.')
       }
