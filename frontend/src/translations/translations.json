@@ -1,0 +1,14 @@
+{
+  "en": {
+    "menuConfiguration": "Menu Configuration",
+    "groupConfiguration": "Group Configuration",
+    "allLocationsShareMenu": "All locations will share the same menu",
+    "differentMenusPerLocation": "Locations will be organized in groups with different menus"
+  },
+  "es": {
+    "menuConfiguration": "Configuración del Menú",
+    "groupConfiguration": "Configuración de Grupos",
+    "allLocationsShareMenu": "Todas las ubicaciones compartirán el mismo menú",
+    "differentMenusPerLocation": "Las ubicaciones se organizarán en grupos con diferentes menús"
+  }
+} 

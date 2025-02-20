@@ -1,0 +1,33 @@
+{
+  "name": "resto-host-ai-onboarding",
+  "version": "1.0.0",
+  "description": "Interactive onboarding system for Resto Host AI",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "admin"
+  ],
+  "scripts": {
+    "dev:frontend": "cd frontend && vite",
+    "dev:backend": "cd backend && node src/index.js",
+    "dev:admin": "cd admin && vite --port 3002",
+    "dev": "npx concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"npm run dev:admin\"",
+    "install:all": "npm install && npm run install:frontend && npm run install:backend && npm run install:admin",
+    "install:frontend": "cd frontend && npm install",
+    "install:backend": "cd backend && npm install",
+    "install:admin": "cd admin && npm install"
+  },
+  "keywords": [
+    "resto-host",
+    "ai",
+    "onboarding",
+    "react",
+    "node"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 
