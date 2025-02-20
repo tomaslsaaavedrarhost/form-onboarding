@@ -1,22 +1,22 @@
 import React, { useState } from 'react'
 import { useAuth } from '../lib/AuthContext'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 
 const Login = () => {
   const { user, loading, signInWithGoogle } = useAuth()
   const [isSigningIn, setIsSigningIn] = useState(false)
+  const location = useLocation()
 
   const handleGoogleSignIn = async (e: React.MouseEvent) => {
-    e.preventDefault() // Prevenir comportamiento por defecto
+    e.preventDefault()
     
-    if (isSigningIn) return // Prevenir múltiples clicks
+    if (isSigningIn) return
 
     setIsSigningIn(true)
     try {
       await signInWithGoogle()
     } catch (error) {
       console.error('Error during sign in:', error)
-    } finally {
       setIsSigningIn(false)
     }
   }
@@ -30,7 +30,8 @@ const Login = () => {
   }
 
   if (user) {
-    return <Navigate to="/" replace />
+    const returnTo = location.state?.from?.pathname || '/'
+    return <Navigate to={returnTo} replace />
   }
 
   return (
