@@ -9,7 +9,7 @@ import {
   getRedirectResult
 } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 interface AuthContextType {
   user: User | null
@@ -32,54 +32,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
-  const location = useLocation()
 
   useEffect(() => {
-    const init = async () => {
-      try {
-        // Set persistence
-        await setPersistence(auth, browserLocalPersistence)
-        
-        // Check for redirect result
-        const result = await getRedirectResult(auth)
+    // Set persistence when the provider mounts
+    setPersistence(auth, browserLocalPersistence)
+      .catch((error) => {
+        console.error('Error setting persistence:', error)
+      })
+
+    // Check for redirect result
+    getRedirectResult(auth)
+      .then((result) => {
         if (result?.user) {
           setUser(result.user)
-          // Usar el state de la URL o redirigir a la página principal
-          const returnTo = location.state?.from?.pathname || '/'
-          navigate(returnTo, { replace: true })
+          navigate('/')
         }
-      } catch (error) {
-        console.error('Error during initialization:', error)
-      } finally {
+      })
+      .catch((error) => {
+        console.error('Error getting redirect result:', error)
+      })
+      .finally(() => {
         setLoading(false)
-      }
-    }
-
-    init()
+      })
 
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setUser(user)
       if (!loading) {
         if (!user) {
-          // Guardar la ubicación actual antes de redirigir al login
-          navigate('/login', { 
-            replace: true,
-            state: { from: location }
-          })
+          navigate('/login')
         }
       }
     })
 
     return () => unsubscribe()
-  }, [navigate, location, loading])
+  }, [navigate, loading])
 
   const signInWithGoogle = async () => {
     try {
       // Configure el proveedor de Google
       googleProvider.setCustomParameters({
-        prompt: 'select_account',
-        // Guardar la URL actual como state para redirigir después del login
-        state: JSON.stringify({ returnTo: location.pathname })
+        prompt: 'select_account'
       })
 
       // Usar redirección
@@ -98,7 +90,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       await signOut(auth)
-      navigate('/login', { replace: true })
+      navigate('/login')
     } catch (error) {
       console.error('Error signing out:', error)
       alert('Error signing out. Please try again.')

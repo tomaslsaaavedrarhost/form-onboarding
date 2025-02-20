@@ -1,11 +1,10 @@
 import React, { useState } from 'react'
 import { useAuth } from '../lib/AuthContext'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 
 const Login = () => {
   const { user, loading, signInWithGoogle } = useAuth()
   const [isSigningIn, setIsSigningIn] = useState(false)
-  const location = useLocation()
 
   const handleGoogleSignIn = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -30,8 +29,7 @@ const Login = () => {
   }
 
   if (user) {
-    const returnTo = location.state?.from?.pathname || '/'
-    return <Navigate to={returnTo} replace />
+    return <Navigate to="/" replace />
   }
 
   return (
