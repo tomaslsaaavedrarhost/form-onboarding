@@ -34,38 +34,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Set persistence when the provider mounts
-    setPersistence(auth, browserLocalPersistence)
-      .catch((error) => {
-        console.error('Error setting persistence:', error)
-      })
+    let unsubscribe: () => void
 
-    // Check for redirect result
-    getRedirectResult(auth)
-      .then((result) => {
+    const initAuth = async () => {
+      try {
+        // Set persistence
+        await setPersistence(auth, browserLocalPersistence)
+        
+        // Check for redirect result
+        const result = await getRedirectResult(auth)
         if (result?.user) {
           setUser(result.user)
-          navigate('/')
+          navigate('/', { replace: true })
         }
-      })
-      .catch((error) => {
-        console.error('Error getting redirect result:', error)
-      })
-      .finally(() => {
-        setLoading(false)
-      })
-
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      setUser(user)
-      if (!loading) {
-        if (!user) {
-          navigate('/login')
-        }
+      } catch (error) {
+        console.error('Error during auth initialization:', error)
       }
-    })
 
-    return () => unsubscribe()
-  }, [navigate, loading])
+      // Set up auth state listener
+      unsubscribe = auth.onAuthStateChanged((user) => {
+        setUser(user)
+        setLoading(false)
+        
+        if (user && window.location.pathname === '/login') {
+          navigate('/', { replace: true })
+        }
+      })
+    }
+
+    initAuth()
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
+  }, [navigate])
 
   const signInWithGoogle = async () => {
     try {
@@ -90,7 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       await signOut(auth)
-      navigate('/login')
+      navigate('/login', { replace: true })
     } catch (error) {
       console.error('Error signing out:', error)
       alert('Error signing out. Please try again.')
