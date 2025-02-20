@@ -64,4 +64,19 @@
   .select-brand {
     @apply block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-brand-orange sm:text-sm sm:leading-6;
   }
+}
+
+@layer utilities {
+  .bg-gradient-brand {
+    background: linear-gradient(135deg, #FF9700 0%, #A700B9 100%);
+  }
+  .bg-gradient-brand-reverse {
+    background: linear-gradient(135deg, #A700B9 0%, #FF9700 100%);
+  }
+  .bg-gradient-brand-yellow {
+    background: linear-gradient(135deg, #FF9700 0%, #FFCE00 100%);
+  }
+  .bg-gradient-brand-full {
+    background: linear-gradient(135deg, #FF9700 0%, #A700B9 50%, #FFCE00 100%);
+  }
 } 

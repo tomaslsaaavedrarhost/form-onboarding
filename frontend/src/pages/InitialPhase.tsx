@@ -76,8 +76,10 @@ export default function InitialPhase() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-semibold bg-gradient-brand bg-clip-text text-transparent">
-          Initial Setup
+        <h2 className="text-2xl font-semibold">
+          <div className="bg-gradient-brand bg-clip-text text-transparent inline-block">
+            Initial Setup
+          </div>
         </h2>
         <p className="mt-2 text-sm text-gray-600">
           Let's start by setting up your restaurant locations.

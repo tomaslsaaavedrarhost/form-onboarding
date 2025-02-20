@@ -3,6 +3,7 @@ import { doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, deleteD
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
+import config from '../config';
 
 export interface FormData {
   // Language
@@ -159,7 +160,7 @@ export const useFormProgress = () => {
       setFormData(updatedData);
 
       // Send email notification (you'll need to implement this in your backend)
-      await fetch('/api/send-share-invitation', {
+      await fetch(`${config.apiUrl}/api/send-share-invitation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -219,7 +220,7 @@ export const useFormProgress = () => {
 
       // If this is a shared form, notify other users of the update
       if (formData.sharedWith?.length) {
-        await fetch('/api/notify-form-update', {
+        await fetch(`${config.apiUrl}/api/notify-form-update`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

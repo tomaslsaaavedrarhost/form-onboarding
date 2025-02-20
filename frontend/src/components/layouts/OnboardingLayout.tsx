@@ -2,6 +2,7 @@ import React from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { useTranslation } from '../../hooks/useTranslation'
+import UserProfile from '../UserProfile'
 
 const getSteps = (t: (key: string) => string) => [
   { name: t('legalDataTitle'), href: '/onboarding/legal-data' },
@@ -25,10 +26,13 @@ export default function OnboardingLayout() {
         <div className="flex min-h-screen flex-col">
           {/* Header */}
           <header className="py-10">
-            <div className="mx-auto max-w-7xl flex flex-col items-center">
-              <h1 className="text-4xl font-bold tracking-tight bg-gradient-brand bg-clip-text text-transparent">
-                {t('onboardingTitle')}
+            <div className="mx-auto max-w-7xl flex justify-between items-center">
+              <h1 className="text-4xl font-bold tracking-tight">
+                <div className="bg-gradient-brand bg-clip-text text-transparent inline-block">
+                  {t('onboardingTitle')}
+                </div>
               </h1>
+              <UserProfile />
             </div>
           </header>
 

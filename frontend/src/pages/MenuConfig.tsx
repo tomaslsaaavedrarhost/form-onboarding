@@ -209,7 +209,7 @@ export default function MenuConfig() {
                   className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
                 >
                   <div className="mb-6">
-                    <h3 className="text-xl font-semibold bg-gradient-brand bg-clip-text text-transparent">
+                    <h3 className="text-lg font-bold tracking-tight bg-gradient-brand bg-clip-text text-transparent">
                       {group.name}
                     </h3>
                     <p className="mt-2 text-sm">
@@ -226,7 +226,7 @@ export default function MenuConfig() {
                   <div className="space-y-6">
                     {/* Menu Information Section */}
                     <div className="space-y-6">
-                      <h4 className="text-lg font-medium bg-gradient-brand-reverse bg-clip-text text-transparent">
+                      <h4 className="text-lg font-bold tracking-tight bg-gradient-brand bg-clip-text text-transparent">
                         Menu Information
                       </h4>
                       

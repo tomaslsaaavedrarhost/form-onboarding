@@ -207,8 +207,8 @@ const AGE_VERIFICATION_DOCUMENTS = [
 ] as const
 
 // Update the section titles to use gradient text
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <h3 className="text-lg font-medium bg-gradient-brand bg-clip-text text-transparent mb-4">
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+  <h3 className="text-lg font-bold tracking-tight bg-gradient-brand bg-clip-text text-transparent mb-4">
     {children}
   </h3>
 )

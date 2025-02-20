@@ -1,9 +1,9 @@
-import { useForm } from '../context/FormContext'
+import { useForm } from '../lib/FormContext'
 import { translations } from '../translations'
 
 export function useTranslation() {
-  const { state } = useForm()
-  const language = state.language || 'en'
+  const { formData } = useForm()
+  const language = formData?.language || 'en'
 
   const t = (key: string): string => {
     return translations[language][key] || translations['en'][key] || key
