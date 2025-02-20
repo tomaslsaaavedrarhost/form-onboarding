@@ -32,55 +32,67 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let unsubscribe: () => void
+
     const initAuth = async () => {
       try {
+        // Set persistence first
         await setPersistence(auth, browserLocalPersistence)
         
+        // Check for redirect result
         const result = await getRedirectResult(auth)
         if (result?.user) {
           setUser(result.user)
-          window.location.href = '/'
+          // Use replace state to avoid navigation issues
+          window.history.replaceState({}, '', '/')
           return
         }
+
+        // Set up auth state listener
+        unsubscribe = auth.onAuthStateChanged((user) => {
+          setUser(user)
+          setLoading(false)
+        })
       } catch (error) {
         console.error('Error during auth initialization:', error)
-        window.location.href = '/'
-      }
-
-      const unsubscribe = auth.onAuthStateChanged((user) => {
-        setUser(user)
         setLoading(false)
-      })
-
-      return () => unsubscribe()
+        // Use replace state for error cases too
+        window.history.replaceState({}, '', '/')
+      }
     }
 
     initAuth()
+
+    // Cleanup subscription
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
   }, [])
 
   const signInWithGoogle = async () => {
     try {
-      googleProvider.setCustomParameters({
-        prompt: 'select_account'
-      })
-
       await signInWithRedirect(auth, googleProvider)
     } catch (error: any) {
       console.error('Error signing in with Google:', error)
       if (error.code === 'auth/unauthorized-domain') {
         console.error('Domain not authorized. Please check Firebase Console settings.')
       }
-      window.location.href = '/'
+      // Use replace state for error cases
+      window.history.replaceState({}, '', '/')
     }
   }
 
   const logout = async () => {
     try {
       await signOut(auth)
-      window.location.href = '/'
+      // Use replace state for logout
+      window.history.replaceState({}, '', '/')
     } catch (error) {
       console.error('Error signing out:', error)
-      window.location.href = '/'
+      // Use replace state for error cases
+      window.history.replaceState({}, '', '/')
     }
   }
 
