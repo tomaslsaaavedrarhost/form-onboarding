@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { User, signInWithPopup, signOut, GoogleAuthProvider, setPersistence, browserLocalPersistence, browserPopupRedirectResolver } from 'firebase/auth'
+import { 
+  User, 
+  signInWithRedirect, 
+  signOut, 
+  GoogleAuthProvider, 
+  setPersistence, 
+  browserLocalPersistence,
+  getRedirectResult
+} from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
 
 interface AuthContextType {
@@ -30,6 +38,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.error('Error setting persistence:', error)
       })
 
+    // Check for redirect result
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          setUser(result.user)
+        }
+      })
+      .catch((error) => {
+        console.error('Error getting redirect result:', error)
+      })
+
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setUser(user)
       setLoading(false)
@@ -42,22 +61,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       // Configure el proveedor de Google
       googleProvider.setCustomParameters({
-        prompt: 'select_account',
-        display: 'popup'
+        prompt: 'select_account'
       })
 
-      // Intenta el inicio de sesión con popup usando el resolver específico
-      const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver)
-      if (!result.user) {
-        throw new Error('No user data received')
-      }
+      // Usar redirección en lugar de popup
+      await signInWithRedirect(auth, googleProvider)
     } catch (error: any) {
       console.error('Error signing in with Google:', error)
-      if (error.code === 'auth/popup-blocked') {
-        alert('Please allow popups for this website to sign in with Google')
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        console.log('Sign-in popup was closed by the user')
-      } else if (error.code === 'auth/unauthorized-domain') {
+      if (error.code === 'auth/unauthorized-domain') {
         console.error('Domain not authorized. Please check Firebase Console settings.')
       } else {
         alert('Error signing in with Google. Please try again.')
