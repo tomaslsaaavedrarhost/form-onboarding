@@ -9,7 +9,6 @@ import {
   getRedirectResult
 } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
-import { useNavigate } from 'react-router-dom'
 
 interface AuthContextType {
   user: User | null
@@ -31,11 +30,8 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const navigate = useNavigate()
 
   useEffect(() => {
-    let unsubscribe: () => void
-
     const initAuth = async () => {
       try {
         // Set persistence
@@ -45,31 +41,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const result = await getRedirectResult(auth)
         if (result?.user) {
           setUser(result.user)
-          navigate('/', { replace: true })
+          window.location.href = '/'
+          return
         }
       } catch (error) {
         console.error('Error during auth initialization:', error)
       }
 
       // Set up auth state listener
-      unsubscribe = auth.onAuthStateChanged((user) => {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
         setUser(user)
         setLoading(false)
-        
+
+        // Si el usuario está autenticado y está en la página de login, redirigir a la página principal
         if (user && window.location.pathname === '/login') {
-          navigate('/', { replace: true })
+          window.location.href = '/'
         }
       })
+
+      return () => unsubscribe()
     }
 
     initAuth()
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
-    }
-  }, [navigate])
+  }, [])
 
   const signInWithGoogle = async () => {
     try {
@@ -94,7 +88,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       await signOut(auth)
-      navigate('/login', { replace: true })
+      window.location.href = '/login'
     } catch (error) {
       console.error('Error signing out:', error)
       alert('Error signing out. Please try again.')

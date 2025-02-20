@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../lib/AuthContext'
-import { Navigate, useNavigate } from 'react-router-dom'
 
 const Login = () => {
   const { user, loading, signInWithGoogle } = useAuth()
   const [isSigningIn, setIsSigningIn] = useState(false)
-  const navigate = useNavigate()
 
   useEffect(() => {
     if (user) {
-      navigate('/', { replace: true })
+      window.location.href = '/'
     }
-  }, [user, navigate])
+  }, [user])
 
   const handleGoogleSignIn = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -33,10 +31,6 @@ const Login = () => {
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-purple"></div>
       </div>
     )
-  }
-
-  if (user) {
-    return <Navigate to="/" replace />
   }
 
   return (
