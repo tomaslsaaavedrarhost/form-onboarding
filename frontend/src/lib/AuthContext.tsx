@@ -34,10 +34,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Set persistence
         await setPersistence(auth, browserLocalPersistence)
         
-        // Check for redirect result
         const result = await getRedirectResult(auth)
         if (result?.user) {
           setUser(result.user)
@@ -46,17 +44,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error('Error during auth initialization:', error)
+        window.location.href = '/'
       }
 
-      // Set up auth state listener
       const unsubscribe = auth.onAuthStateChanged((user) => {
         setUser(user)
         setLoading(false)
-
-        // Si el usuario está autenticado y está en la página de login, redirigir a la página principal
-        if (user && window.location.pathname === '/login') {
-          window.location.href = '/'
-        }
       })
 
       return () => unsubscribe()
@@ -67,31 +60,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithGoogle = async () => {
     try {
-      // Configure el proveedor de Google
       googleProvider.setCustomParameters({
         prompt: 'select_account'
       })
 
-      // Usar redirección
       await signInWithRedirect(auth, googleProvider)
     } catch (error: any) {
       console.error('Error signing in with Google:', error)
       if (error.code === 'auth/unauthorized-domain') {
         console.error('Domain not authorized. Please check Firebase Console settings.')
-      } else {
-        alert('Error signing in with Google. Please try again.')
       }
-      throw error
+      window.location.href = '/'
     }
   }
 
   const logout = async () => {
     try {
       await signOut(auth)
-      window.location.href = '/login'
+      window.location.href = '/'
     } catch (error) {
       console.error('Error signing out:', error)
-      alert('Error signing out. Please try again.')
+      window.location.href = '/'
     }
   }
 
