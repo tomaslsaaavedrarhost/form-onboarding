@@ -15,15 +15,15 @@ interface FormContextType {
 
 const FormContext = createContext<FormContextType | null>(null);
 
-export const useForm = () => {
+function useForm() {
   const context = useContext(FormContext);
   if (!context) {
     throw new Error('useForm debe ser usado dentro de un FormProvider');
   }
   return context;
-};
+}
 
-export const FormProvider = ({ children }: { children: ReactNode }) => {
+function FormProvider({ children }: { children: ReactNode }) {
   const formProgress = useFormProgress();
 
   return (
@@ -31,4 +31,6 @@ export const FormProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </FormContext.Provider>
   );
-}; 
+}
+
+export { FormProvider, useForm }; 

@@ -4,7 +4,7 @@
   "description": "Backend for Resto Host AI form notifications",
   "main": "dist/index.js",
   "engines": {
-    "node": "18.x"
+    "node": ">=18.x"
   },
   "scripts": {
     "start": "node dist/index.js",
