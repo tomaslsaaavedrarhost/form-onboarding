@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { User, signInWithPopup, signOut } from 'firebase/auth'
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { User, signInWithPopup, signOut, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
 
 interface AuthContextType {
@@ -24,6 +24,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Set persistence when the provider mounts
+    setPersistence(auth, browserLocalPersistence)
+      .catch((error) => {
+        console.error('Error setting persistence:', error)
+      })
+
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setUser(user)
       setLoading(false)
@@ -34,9 +40,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithGoogle = async () => {
     try {
-      await signInWithPopup(auth, googleProvider)
-    } catch (error) {
+      // Configure el proveedor de Google
+      googleProvider.setCustomParameters({
+        prompt: 'select_account'
+      })
+
+      // Intenta el inicio de sesión con popup
+      const result = await signInWithPopup(auth, googleProvider)
+      if (!result.user) {
+        throw new Error('No user data received')
+      }
+    } catch (error: any) {
       console.error('Error signing in with Google:', error)
+      if (error.code === 'auth/popup-blocked') {
+        alert('Please allow popups for this website to sign in with Google')
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        console.log('Sign-in popup was closed by the user')
+      } else {
+        alert('Error signing in with Google. Please try again.')
+      }
+      throw error
     }
   }
 
@@ -45,6 +68,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await signOut(auth)
     } catch (error) {
       console.error('Error signing out:', error)
+      alert('Error signing out. Please try again.')
     }
   }
 
