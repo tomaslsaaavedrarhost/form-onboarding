@@ -9,6 +9,7 @@ import {
   getRedirectResult
 } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
+import { useNavigate } from 'react-router-dom'
 
 interface AuthContextType {
   user: User | null
@@ -30,6 +31,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(() => {
     // Set persistence when the provider mounts
@@ -43,19 +45,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .then((result) => {
         if (result?.user) {
           setUser(result.user)
+          // Redirigir al usuario a la página principal después del login exitoso
+          navigate('/')
         }
       })
       .catch((error) => {
         console.error('Error getting redirect result:', error)
+        // En caso de error, redirigir al login
+        navigate('/login')
+      })
+      .finally(() => {
+        setLoading(false)
       })
 
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setUser(user)
-      setLoading(false)
+      if (!loading) {
+        if (user) {
+          navigate('/')
+        } else {
+          navigate('/login')
+        }
+      }
     })
 
     return () => unsubscribe()
-  }, [])
+  }, [navigate, loading])
 
   const signInWithGoogle = async () => {
     try {
@@ -80,6 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     try {
       await signOut(auth)
+      navigate('/login')
     } catch (error) {
       console.error('Error signing out:', error)
       alert('Error signing out. Please try again.')
