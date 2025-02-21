@@ -432,7 +432,7 @@ const TIME_ZONES = [
   { value: 'Pacific/Honolulu', label: 'Hawaii-Aleutian Time (HAT)' }
 ] as const
 
-export default function LocationDetails() {
+const LocationDetails = () => {
   const navigate = useNavigate()
   const { state, dispatch } = useForm()
   const { t } = useTranslation()
@@ -1757,4 +1757,6 @@ export default function LocationDetails() {
       </Formik>
     </div>
   )
-} 
+}
+
+export default LocationDetails 
