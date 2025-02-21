@@ -167,6 +167,7 @@ export const useFormProgress = () => {
           'Content-Type': 'application/json',
           'Origin': window.location.origin
         },
+        mode: 'cors',
         credentials: 'include',
         body: JSON.stringify({
           recipientEmail,
@@ -176,12 +177,26 @@ export const useFormProgress = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Error al enviar la invitación por email');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al enviar la invitación por email');
       }
+
+      const data = await response.json();
+      console.log('Share invitation sent successfully:', data);
     } catch (err) {
       console.error('Error sharing form:', err);
-      setError('Error al compartir el formulario');
-      throw err;
+      // Revert Firestore changes if email sending fails
+      try {
+        const updatedData = {
+          ...formData,
+          sharedWith: (formData.sharedWith || []).filter(email => email !== recipientEmail)
+        };
+        await setDoc(doc(db, 'formProgress', user.uid), updatedData, { merge: true });
+        setFormData(updatedData);
+      } catch (revertError) {
+        console.error('Error reverting changes:', revertError);
+      }
+      throw new Error('Error al compartir el formulario: ' + (err instanceof Error ? err.message : 'Error desconocido'));
     }
   };
 

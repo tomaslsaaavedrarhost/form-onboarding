@@ -10,7 +10,7 @@ const port = process.env.PORT || 3001;
 
 // CORS configuration
 const allowedOrigins = [
-  'https://frontend-q1t-main-tomas-projects-9383cbd1.vercel.app',
+  'https://frontend-git-main-tomas-projects-9383cbd1.vercel.app',
   'https://forms-onboarding.vercel.app',
   'http://localhost:3000'
 ];
@@ -26,7 +26,9 @@ app.use(cors({
     }
     return callback(null, true);
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin']
 }));
 
 app.use(express.json());
