@@ -80,6 +80,9 @@ export interface FormData {
   ownerId?: string;
   sharedWith?: string[];
   formId?: string;
+
+  // New field for shared form
+  isShared?: boolean;
 }
 
 interface ShareInvitation {
@@ -103,16 +106,7 @@ export const useFormProgress = () => {
       if (!user) return;
 
       try {
-        // Load owned form
-        const docRef = doc(db, 'formProgress', user.uid);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          const ownedForm = docSnap.data() as FormData;
-          setFormData({ ...ownedForm, ownerId: user.uid });
-        }
-
-        // Load shared forms
+        // Load shared forms first
         const sharedFormsQuery = query(
           collection(db, 'formProgress'),
           where('sharedWith', 'array-contains', user.email)
@@ -120,12 +114,30 @@ export const useFormProgress = () => {
         const sharedFormsSnap = await getDocs(sharedFormsQuery);
         const sharedFormsData = sharedFormsSnap.docs.map(doc => ({
           ...doc.data(),
-          formId: doc.id
+          formId: doc.id,
+          isShared: true
         })) as FormData[];
-        setSharedForms(sharedFormsData);
+        
+        if (sharedFormsData.length > 0) {
+          // Si hay formularios compartidos, usar el primero
+          setFormData(sharedFormsData[0]);
+          setSharedForms(sharedFormsData);
+          console.log('Loaded shared form:', sharedFormsData[0]);
+        } else {
+          // Si no hay formularios compartidos, cargar el propio
+          const docRef = doc(db, 'formProgress', user.uid);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            const ownedForm = docSnap.data() as FormData;
+            setFormData({ ...ownedForm, ownerId: user.uid });
+            console.log('Loaded owned form:', ownedForm);
+          }
+        }
 
         setLoading(false);
       } catch (err) {
+        console.error('Error loading form data:', err);
         setError('Error al cargar los datos del formulario');
         setLoading(false);
       }
@@ -240,22 +252,34 @@ export const useFormProgress = () => {
         lastUpdated: new Date(),
       };
 
-      await setDoc(doc(db, 'formProgress', user.uid), updatedData, { merge: true });
+      // Determine which document to update
+      const docId = formData.isShared && formData.formId ? formData.formId : user.uid;
+      await setDoc(doc(db, 'formProgress', docId), updatedData, { merge: true });
       setFormData(updatedData);
 
-      // If this is a shared form, notify other users of the update
+      // If this is a shared form, notify other users
       if (formData.sharedWith?.length) {
-        await fetch(`${config.apiUrl}/api/notify-form-update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            formId: user.uid,
-            updatedBy: user.email,
-            sharedWith: formData.sharedWith
-          })
-        });
+        try {
+          await fetch(`${import.meta.env.VITE_API_URL}/api/notify-form-update`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Origin': window.location.origin
+            },
+            mode: 'cors',
+            credentials: 'include',
+            body: JSON.stringify({
+              formId: docId,
+              updatedBy: user.email,
+              sharedWith: formData.sharedWith
+            })
+          });
+        } catch (notifyError) {
+          console.error('Error notifying form update:', notifyError);
+        }
       }
     } catch (err) {
+      console.error('Error saving form data:', err);
       setError('Error al guardar los datos del formulario');
     }
   };
