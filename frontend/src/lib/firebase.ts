@@ -2,7 +2,7 @@
 
 import { initializeApp, getApps } from 'firebase/app'
 import { getAnalytics } from 'firebase/analytics'
-import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence } from 'firebase/auth'
+import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
@@ -43,54 +43,17 @@ console.log('Current Environment:', import.meta.env.MODE)
 console.log('Base URL:', window.location.origin)
 console.log('Full Auth Domain:', firebaseConfig.authDomain)
 
-// Initialize Firebase (only if not already initialized)
-const existingApp = getApps().length > 0
-const app = existingApp ? getApps()[0] : initializeApp(firebaseConfig)
+// Initialize Firebase
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
 
-console.log('Firebase Status:', existingApp ? 'Using existing instance' : 'New instance initialized')
-
-// Initialize Authentication with detailed logging
+// Initialize services
 const auth = getAuth(app)
-
-// Set persistence to LOCAL immediately
-setPersistence(auth, browserLocalPersistence)
-  .then(() => console.log('Firebase Auth persistence set to LOCAL'))
-  .catch(error => console.error('Error setting persistence:', error))
-
-console.log('Firebase Auth initialized with config:', {
-  authDomain: auth.config.authDomain,
-  apiKey: '[PRESENT]'
-})
-
-// Initialize provider with custom parameters
-const googleProvider = new GoogleAuthProvider()
-googleProvider.setCustomParameters({
-  prompt: 'select_account',
-  login_hint: '',  // Permite que el usuario elija la cuenta
-  access_type: 'offline'  // Necesario para obtener refresh token
-})
-
-// Add scopes if needed
-googleProvider.addScope('profile')
-googleProvider.addScope('email')
-
-// Log provider configuration
-console.log('Google Provider Configuration:', {
-  providerId: googleProvider.providerId,
-  currentDomain: window.location.origin,
-  authDomain: firebaseConfig.authDomain,
-  allowedDomains: [window.location.origin, firebaseConfig.authDomain]
-})
-
-// Initialize Firestore
 const db = getFirestore(app)
-console.log('Firestore initialized with project:', firebaseConfig.projectId)
-
-// Initialize Storage
 const storage = getStorage(app)
-console.log('Storage initialized with bucket:', firebaseConfig.storageBucket)
 
-// Only initialize analytics on production
+console.log('Firebase Status:', getApps().length === 0 ? 'New instance initialized' : 'Using existing instance')
+
+// Initialize Analytics
 let analytics = null
 if (import.meta.env.MODE === 'production' && !window.location.href.includes('localhost')) {
   try {
@@ -101,6 +64,6 @@ if (import.meta.env.MODE === 'production' && !window.location.href.includes('loc
   }
 }
 
-export { app, analytics, auth, googleProvider, db, storage }
+export { app, analytics, auth, db, storage }
 
 export default app; 

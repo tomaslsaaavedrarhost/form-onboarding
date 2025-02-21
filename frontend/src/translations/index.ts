@@ -87,7 +87,6 @@ export const translations: Translations = {
     "continueToInitialSetup": "Continue to Initial Setup",
 
     // Location Details Page
-    "locationDetailsTitle": "Location Details",
     "locationDetailsSubtitle": "Please provide specific details for each of your locations.",
     "continue": "Continue",
     "stateField": "State",
@@ -317,7 +316,6 @@ export const translations: Translations = {
     "continueToInitialSetup": "Continuar a Configuración Inicial",
 
     // Location Details Page
-    "locationDetailsTitle": "Detalles de Ubicación",
     "locationDetailsSubtitle": "Por favor proporciona detalles específicos para cada una de tus ubicaciones.",
     "continue": "Continuar",
     "stateField": "Estado",
@@ -446,4 +444,6 @@ export const translations: Translations = {
     "reservationLink": "Enlace de Reserva",
     "reservationLinkDescription": "Ingresa el enlace directo de reserva para esta ubicación. Este enlace será enviado a los clientes que deseen hacer una reserva.",
   }
-} 
+}
+
+export default translations; 

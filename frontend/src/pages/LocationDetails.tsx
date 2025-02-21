@@ -432,6 +432,12 @@ const TIME_ZONES = [
   { value: 'Pacific/Honolulu', label: 'Hawaii-Aleutian Time (HAT)' }
 ] as const
 
+interface WaitTimes {
+  [key: string]: {
+    [timeSlot: string]: string;
+  };
+}
+
 const LocationDetails = () => {
   const navigate = useNavigate()
   const { state, dispatch } = useForm()
@@ -1519,7 +1525,7 @@ const LocationDetails = () => {
                                                   range.value
                                                 )}
                                                 className={`px-3 py-2 rounded-md text-sm font-medium ${range.color} ${
-                                                  values.locationDetails[index].waitTimes?.[day]?.[slot.id] === range.value
+                                                  values.locationDetails[index].waitTimes?.[day as keyof WaitTimes]?.[slot.id] === range.value
                                                     ? 'ring-2 ring-indigo-500'
                                                     : ''
                                                 }`}
@@ -1602,36 +1608,37 @@ const LocationDetails = () => {
                               />
                               <span className="ml-2 text-sm text-gray-700">Yes</span>
                             </label>
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.smokingArea.hasSmokingArea`}
-                                checked={values.locationDetails[index].smokingArea.hasSmokingArea === false}
-                                onChange={() => setFieldValue(`locationDetails.${index}.smokingArea.hasSmokingArea`, false)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">No</span>
-                            </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  name={`locationDetails.${index}.smokingArea.hasSmokingArea`}
+                                  checked={values.locationDetails[index].smokingArea.hasSmokingArea === false}
+                                  onChange={() => setFieldValue(`locationDetails.${index}.smokingArea.hasSmokingArea`, false)}
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">No</span>
+                              </label>
+                            </div>
                           </div>
-                        </div>
 
-                        {values.locationDetails[index].smokingArea.hasSmokingArea && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                              Smoking Area Details
-                            </label>
-                            <p className="mt-1 text-sm text-gray-500">
-                              Provide details about the smoking area location and any specific rules
-                            </p>
-                            <Field
-                              as="textarea"
-                              name={`locationDetails.${index}.smokingArea.details`}
-                              rows={3}
-                              placeholder="e.g., Outdoor patio on the east side, covered area with heaters"
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            />
-                          </div>
-                        )}
+                          {values.locationDetails[index].smokingArea.hasSmokingArea && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                Smoking Area Details
+                              </label>
+                              <p className="mt-1 text-sm text-gray-500">
+                                Provide details about the smoking area location and any specific rules
+                              </p>
+                              <Field
+                                as="textarea"
+                                name={`locationDetails.${index}.smokingArea.details`}
+                                rows={3}
+                                placeholder="e.g., Outdoor patio on the east side, covered area with heaters"
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 

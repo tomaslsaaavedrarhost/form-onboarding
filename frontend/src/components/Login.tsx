@@ -1,87 +1,54 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../lib/AuthContext'
-import { auth, googleProvider } from '../lib/firebase'
-import { signInWithPopup } from 'firebase/auth'
-import { useLocation } from 'react-router-dom'
 
 const Login = () => {
-  const { loading: authLoading } = useAuth()
+  const { user, loading, login, register, resetPassword, error: authError } = useAuth()
   const [isSigningIn, setIsSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const location = useLocation()
+  const [isRegistering, setIsRegistering] = useState(false)
+  const [isResettingPassword, setIsResettingPassword] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
   useEffect(() => {
-    console.log('Login Component - Initial State:', {
-      isLoading: authLoading,
-      currentUser: auth.currentUser?.email || 'None',
-      provider: googleProvider.providerId,
-      currentPath: location.pathname,
-      intendedPath: sessionStorage.getItem('intendedPath') || '/',
-      state: location.state
-    })
-  }, [authLoading, location])
-
-  const handleGoogleSignIn = async (e: React.MouseEvent) => {
-    e.preventDefault()
-    
-    if (isSigningIn || authLoading) {
-      console.log('Sign in already in progress', {
-        isSigningIn,
-        authLoading
-      })
-      return
+    if (user) {
+      window.location.href = '/'
     }
+  }, [user])
 
-    console.log('Starting Google sign in process...', {
-      currentUser: auth.currentUser?.email || 'None',
-      authDomain: auth.config.authDomain,
-      provider: googleProvider.providerId,
-      intendedPath: sessionStorage.getItem('intendedPath') || '/'
-    })
+  useEffect(() => {
+    setError(authError)
+  }, [authError])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isSigningIn) return
 
     setIsSigningIn(true)
     setError(null)
 
     try {
-      const result = await signInWithPopup(auth, googleProvider)
-      console.log('Sign in successful:', {
-        user: result.user.email,
-        providerId: result.providerId,
-        operationType: result.operationType
-      })
-    } catch (error: any) {
-      console.error('Error during sign in:', {
-        code: error.code,
-        message: error.message,
-        domain: window.location.origin,
-        currentPath: location.pathname
-      })
-      
-      let errorMessage = 'Error al iniciar sesión. Por favor, intenta de nuevo.'
-      
-      if (error.code === 'auth/unauthorized-domain') {
-        errorMessage = 'Este dominio no está autorizado para iniciar sesión. Por favor, contacta al administrador.'
-        console.error('Unauthorized domain details:', {
-          currentDomain: window.location.origin,
-          authDomain: auth.config.authDomain,
-          allowedDomains: ['localhost', auth.config.authDomain]
-        })
-      } else if (error.code === 'auth/popup-closed-by-user') {
-        errorMessage = 'El proceso de inicio de sesión fue cancelado.'
-      } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = 'El popup fue bloqueado por el navegador. Por favor, permite ventanas emergentes para este sitio.'
+      if (isResettingPassword) {
+        await resetPassword(email)
+        setError('Se ha enviado un email para restablecer tu contraseña.')
+        setIsResettingPassword(false)
+      } else if (isRegistering) {
+        if (password !== confirmPassword) {
+          throw new Error('Las contraseñas no coinciden.')
+        }
+        await register(email, password)
+      } else {
+        await login(email, password)
       }
-      
-      setError(errorMessage)
+    } catch (err: any) {
+      setError(err.message)
     } finally {
       setIsSigningIn(false)
     }
   }
 
-  const isLoading = isSigningIn || authLoading
-
-  if (authLoading && !isSigningIn) {
-    console.log('Showing loading spinner (initial auth check)')
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-purple"></div>
@@ -94,42 +61,128 @@ const Login = () => {
       <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-lg">
         <div>
           <h1 className="text-4xl font-bold tracking-tight bg-gradient-brand bg-clip-text text-transparent">
-            Welcome to Resto Host Onboarding
+            {isRegistering ? 'Crear cuenta' : isResettingPassword ? 'Restablecer contraseña' : 'Iniciar sesión'}
           </h1>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Please sign in to continue
+            {isRegistering ? 'Crea una cuenta para continuar' : isResettingPassword ? 'Ingresa tu email para restablecer tu contraseña' : 'Ingresa tus credenciales para continuar'}
           </p>
         </div>
-
+        
         {error && (
-          <div className="rounded-md bg-red-50 p-4">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="bg-red-50 border-l-4 border-red-400 p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
           </div>
         )}
 
-        <div className="mt-8">
-          <button
-            onClick={handleGoogleSignIn}
-            disabled={isLoading}
-            className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-brand hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-purple transition-all duration-200 ${
-              isLoading ? 'opacity-75 cursor-not-allowed' : ''
-            }`}
-          >
-            <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-              {isLoading ? (
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <label htmlFor="email" className="sr-only">Email</label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-brand-purple focus:border-brand-purple focus:z-10 sm:text-sm"
+                placeholder="Email"
+              />
+            </div>
+            {!isResettingPassword && (
+              <div>
+                <label htmlFor="password" className="sr-only">Contraseña</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete={isRegistering ? 'new-password' : 'current-password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-brand-purple focus:border-brand-purple focus:z-10 sm:text-sm"
+                  placeholder="Contraseña"
+                />
+              </div>
+            )}
+            {isRegistering && (
+              <div>
+                <label htmlFor="confirmPassword" className="sr-only">Confirmar contraseña</label>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-brand-purple focus:border-brand-purple focus:z-10 sm:text-sm"
+                  placeholder="Confirmar contraseña"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRegistering(false)
+                  setIsResettingPassword(!isResettingPassword)
+                  setError(null)
+                }}
+                className="font-medium text-brand-purple hover:text-brand-purple-dark"
+              >
+                {isResettingPassword ? 'Volver al inicio de sesión' : '¿Olvidaste tu contraseña?'}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              disabled={isSigningIn}
+              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-brand-purple hover:bg-brand-purple-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-purple ${
+                isSigningIn ? 'opacity-75 cursor-not-allowed' : ''
+              }`}
+            >
+              {isSigningIn ? (
                 <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+              ) : isResettingPassword ? (
+                'Enviar email de recuperación'
+              ) : isRegistering ? (
+                'Registrarse'
               ) : (
-                <svg className="h-5 w-5 text-white group-hover:text-gray-100" viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
-                  />
-                </svg>
+                'Iniciar sesión'
               )}
-            </span>
-            {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión con Google'}
-          </button>
-        </div>
+            </button>
+          </div>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(!isRegistering)
+                setIsResettingPassword(false)
+                setError(null)
+              }}
+              className="font-medium text-brand-purple hover:text-brand-purple-dark"
+            >
+              {isRegistering ? '¿Ya tienes una cuenta? Inicia sesión' : '¿No tienes una cuenta? Regístrate'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )

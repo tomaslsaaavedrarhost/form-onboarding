@@ -1,28 +1,29 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { 
   User, 
-  signInWithPopup,
   signOut, 
-  GoogleAuthProvider, 
-  setPersistence, 
-  browserLocalPersistence,
-  onAuthStateChanged
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail
 } from 'firebase/auth'
-import { auth, googleProvider } from './firebase'
+import { auth } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 interface AuthContextType {
   user: User | null
   loading: boolean
-  signInWithGoogle: () => Promise<void>
+  register: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<void>
+  resetPassword: (email: string) => Promise<void>
   logout: () => Promise<void>
+  error: string | null
 }
 
-const AuthContext = createContext<AuthContextType | null>(null)
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
@@ -31,49 +32,31 @@ function useAuth() {
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Set up auth state listener
   useEffect(() => {
-    console.log('Setting up auth state listener...', {
-      currentPath: location.pathname,
-      isLoginPage: location.pathname === '/login'
-    })
+    console.log('Setting up auth state listener...')
     
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
       console.log('Auth state changed:', {
         hasUser: user ? 'Yes' : 'No',
         userEmail: user?.email || 'N/A',
         emailVerified: user?.emailVerified || false,
-        providerId: user?.providerId || 'N/A',
-        currentPath: location.pathname
       })
       
       if (user) {
-        try {
-          await setPersistence(auth, browserLocalPersistence)
-          console.log('Auth persistence set to LOCAL')
-          
-          // If on login page, redirect to home or intended path
-          if (location.pathname === '/login') {
-            const intendedPath = sessionStorage.getItem('intendedPath') || '/'
-            console.log('Redirecting to:', intendedPath)
-            navigate(intendedPath, { replace: true })
-            sessionStorage.removeItem('intendedPath')
-          }
-        } catch (error: any) {
-          console.error('Error setting persistence:', {
-            code: error.code,
-            message: error.message
-          })
+        if (location.pathname === '/login') {
+          const intendedPath = sessionStorage.getItem('intendedPath') || '/'
+          console.log('Redirecting to:', intendedPath)
+          navigate(intendedPath, { replace: true })
+          sessionStorage.removeItem('intendedPath')
         }
       } else if (!user && location.pathname !== '/login') {
-        // Store intended path
         console.log('Storing intended path:', location.pathname)
         sessionStorage.setItem('intendedPath', location.pathname)
         
-        // Redirect to login
         console.log('Redirecting to login')
         navigate('/login', { replace: true })
       }
@@ -82,62 +65,87 @@ function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
 
-    return () => {
-      console.log('Cleaning up auth state listener')
-      unsubscribe()
-    }
+    return () => unsubscribe()
   }, [navigate, location])
 
-  const signInWithGoogle = async () => {
+  const register = async (email: string, password: string) => {
     try {
-      console.log('Starting Google sign in process...', {
-        currentPath: location.pathname,
-        currentUser: auth.currentUser?.email || 'None'
-      })
-      
+      setError(null)
       setLoading(true)
-      const result = await signInWithPopup(auth, googleProvider)
-      console.log('Sign in successful:', {
-        user: result.user.email,
-        providerId: result.providerId,
-        operationType: result.operationType
-      })
-
-      // Handle successful sign in
-      const intendedPath = sessionStorage.getItem('intendedPath') || '/'
-      navigate(intendedPath, { replace: true })
-      sessionStorage.removeItem('intendedPath')
-      
+      await createUserWithEmailAndPassword(auth, email, password)
     } catch (error: any) {
-      console.error('Error in Google sign in:', {
-        code: error.code,
-        message: error.message,
-        customData: error.customData
-      })
+      console.error('Error during registration:', error)
+      let errorMessage = 'Error al registrar usuario.'
       
-      if (error.code === 'auth/unauthorized-domain') {
-        console.error('Domain not authorized:', {
-          currentDomain: window.location.origin,
-          authDomain: auth.config.authDomain
-        })
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Este email ya está registrado.'
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Email inválido.'
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'La contraseña debe tener al menos 6 caracteres.'
       }
       
-      setLoading(false)
+      setError(errorMessage)
       throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const login = async (email: string, password: string) => {
+    try {
+      setError(null)
+      setLoading(true)
+      await signInWithEmailAndPassword(auth, email, password)
+    } catch (error: any) {
+      console.error('Error during login:', error)
+      let errorMessage = 'Error al iniciar sesión.'
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'Usuario no encontrado.'
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Contraseña incorrecta.'
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Email inválido.'
+      }
+      
+      setError(errorMessage)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetPassword = async (email: string) => {
+    try {
+      setError(null)
+      setLoading(true)
+      await sendPasswordResetEmail(auth, email)
+    } catch (error: any) {
+      console.error('Error during password reset:', error)
+      let errorMessage = 'Error al enviar email de recuperación.'
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No existe una cuenta con este email.'
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Email inválido.'
+      }
+      
+      setError(errorMessage)
+      throw error
+    } finally {
+      setLoading(false)
     }
   }
 
   const logout = async () => {
     try {
-      console.log('Starting logout process...')
+      setError(null)
       await signOut(auth)
-      console.log('Logout successful, redirecting to login')
       navigate('/login', { replace: true })
     } catch (error: any) {
-      console.error('Error during logout:', {
-        code: error.code,
-        message: error.message
-      })
+      console.error('Error during logout:', error)
+      setError('Error al cerrar sesión.')
       throw error
     }
   }
@@ -145,8 +153,11 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const value = {
     user,
     loading,
-    signInWithGoogle,
-    logout
+    register,
+    login,
+    resetPassword,
+    logout,
+    error
   }
 
   return (
@@ -156,4 +167,4 @@ function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export { AuthProvider, useAuth } 
+export { AuthProvider } 
