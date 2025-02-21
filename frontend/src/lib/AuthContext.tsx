@@ -1,12 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { 
   User, 
-  signInWithRedirect, 
+  signInWithPopup,
   signOut, 
   GoogleAuthProvider, 
   setPersistence, 
   browserLocalPersistence,
-  getRedirectResult,
   onAuthStateChanged
 } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
@@ -32,58 +31,8 @@ function useAuth() {
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [initialized, setInitialized] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-
-  // Handle redirect result
-  useEffect(() => {
-    const handleRedirectResult = async () => {
-      try {
-        console.log('Checking redirect result...', {
-          currentURL: window.location.href,
-          pathname: location.pathname,
-          hasCode: window.location.href.includes('code='),
-          hasState: window.location.href.includes('state=')
-        })
-        
-        const result = await getRedirectResult(auth)
-        console.log('Redirect result:', {
-          success: result ? 'Yes' : 'No',
-          hasUser: result?.user ? 'Yes' : 'No',
-          userEmail: result?.user?.email || 'N/A',
-          operationType: result?.operationType || 'N/A',
-          currentUser: auth.currentUser?.email || 'None'
-        })
-        
-        if (result?.user) {
-          console.log('Setting user after successful redirect:', {
-            email: result.user.email,
-            uid: result.user.uid,
-            emailVerified: result.user.emailVerified
-          })
-          setUser(result.user)
-          
-          // Redirect to home or intended page
-          const intendedPath = sessionStorage.getItem('intendedPath') || '/'
-          console.log('Redirecting to:', intendedPath)
-          navigate(intendedPath, { replace: true })
-          sessionStorage.removeItem('intendedPath')
-        }
-      } catch (error: any) {
-        console.error('Error handling redirect:', {
-          code: error.code,
-          message: error.message,
-          customData: error.customData
-        })
-      } finally {
-        console.log('Redirect handling completed')
-        setInitialized(true)
-      }
-    }
-
-    handleRedirectResult()
-  }, [navigate])
 
   // Set up auth state listener
   useEffect(() => {
@@ -147,8 +96,18 @@ function AuthProvider({ children }: { children: ReactNode }) {
       })
       
       setLoading(true)
-      await signInWithRedirect(auth, googleProvider)
-      console.log('Redirect initiated successfully')
+      const result = await signInWithPopup(auth, googleProvider)
+      console.log('Sign in successful:', {
+        user: result.user.email,
+        providerId: result.providerId,
+        operationType: result.operationType
+      })
+
+      // Handle successful sign in
+      const intendedPath = sessionStorage.getItem('intendedPath') || '/'
+      navigate(intendedPath, { replace: true })
+      sessionStorage.removeItem('intendedPath')
+      
     } catch (error: any) {
       console.error('Error in Google sign in:', {
         code: error.code,
