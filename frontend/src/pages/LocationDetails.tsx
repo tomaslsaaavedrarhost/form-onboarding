@@ -2,12 +2,12 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Formik, Form, Field, FieldArray } from 'formik'
 import * as Yup from 'yup'
-import { useForm } from '../context/FormContext'
+import { useForm, type LocationDetail } from '../context/FormContext'
 import { useTranslation } from '../hooks/useTranslation'
 import { TimeSlots } from '../components/TimeSlots'
 import WeeklySchedule from '../components/WeeklySchedule'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
-import { LocationDetail } from '../context/FormContext'
+import type { Location } from '../context/FormContext'
 import { useFormikContext } from 'formik'
 
 // Lista de estados de EE.UU.
@@ -438,127 +438,11 @@ interface WaitTimes {
   };
 }
 
-const LocationDetails = () => {
-  const navigate = useNavigate()
-  const { state, dispatch } = useForm()
-  const { t } = useTranslation()
-  const [expandedLocations, setExpandedLocations] = useState<string[]>([])
-
-  const initialValues = {
-    locationDetails: (state.locations || []).map(location => ({
-      locationId: location.id,
-      state: '',
-      streetAddress: '',
-      timeZone: '',
-      managerEmail: '',
-      phoneNumbers: [''],
-      acceptedPaymentMethods: [],
-      creditCardExclusions: '',
-      debitCardExclusions: '',
-      mobilePaymentExclusions: '',
-      phoneCarrier: '',
-      otherPhoneCarrier: '',
-      carrierCredentials: {
-        username: '',
-        password: '',
-        pin: ''
-      },
-      schedule: createEmptySchedule(),
-      defaultTransferToHost: true,
-      transferRules: [],
-      reservationSettings: {
-        acceptsReservations: false,
-        platform: '',
-        reservationLink: '',
-        phoneCarrier: '',
-        parking: {
-          hasParking: false,
-          parkingType: undefined,
-          pricingDetails: '',
-          location: ''
-        },
-        schedule: createEmptySchedule()
-      },
-      waitTimes: {
-        monday: {},
-        tuesday: {},
-        wednesday: {},
-        thursday: {},
-        friday: {},
-        saturday: {},
-        sunday: {}
-      },
-      pickupSettings: {
-        platforms: [],
-        preferredPlatform: '',
-        preferredPlatformLink: ''
-      },
-      deliverySettings: {
-        platforms: [],
-        preferredPlatform: '',
-        preferredPlatformLink: ''
-      },
-      parking: {
-        hasParking: false,
-        parkingType: undefined,
-        pricingDetails: '',
-        location: ''
-      },
-      corkage: {
-        allowed: false,
-        fee: ''
-      },
-      specialDiscounts: {
-        hasDiscounts: false,
-        details: []
-      },
-      holidayEvents: {
-        hasEvents: false,
-        events: []
-      },
-      specialEvents: {
-        hasEvents: false,
-        events: []
-      },
-      socialMedia: {
-        instagram: {
-          usesInstagram: false,
-          handle: ''
-        }
-      },
-      birthdayCelebrations: {
-        allowed: false,
-        details: '',
-        restrictions: []
-      },
-      dressCode: {
-        hasDressCode: false,
-        details: '',
-        exceptions: []
-      },
-      ageVerification: {
-        acceptedDocuments: [],
-        otherDocuments: ''
-      },
-      smokingArea: {
-        hasSmokingArea: false,
-        details: ''
-      },
-      brunchMenu: {
-        hasBrunchMenu: false,
-        schedule: '',
-        menuFile: null
-      }
-    }))
-  } as FormValues
-
-  const handleSubmit = (values: FormValues) => {
-    dispatch({
-      type: 'SET_LOCATION_DETAILS',
-      payload: values.locationDetails
-    })
-    navigate('/onboarding/ai-config')
-  }
+export default function LocationDetails() {
+  const { state, dispatch } = useForm();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const [expandedLocations, setExpandedLocations] = useState<string[]>([]);
 
   return (
     <div className="space-y-8">
@@ -570,17 +454,86 @@ const LocationDetails = () => {
       </div>
 
       <Formik
-        initialValues={initialValues}
+        initialValues={{
+          locationDetails: (state.locations || []).map((location): LocationDetail => ({
+            locationId: location.id,
+            state: '',
+            streetAddress: '',
+            timeZone: '',
+            managerEmail: '',
+            phoneNumbers: [],
+            acceptedPaymentMethods: [],
+            phoneCarrier: '',
+            schedule: createEmptySchedule(),
+            defaultTransferToHost: false,
+            transferRules: [],
+            reservationSettings: {
+              acceptsReservations: false,
+              platform: '',
+              reservationLink: '',
+              phoneCarrier: '',
+              parking: {
+                hasParking: false
+              },
+              schedule: createEmptySchedule()
+            },
+            pickupSettings: {
+              platforms: [],
+              preferredPlatform: '',
+              preferredPlatformLink: ''
+            },
+            deliverySettings: {
+              platforms: [],
+              preferredPlatform: '',
+              preferredPlatformLink: ''
+            },
+            parking: {
+              hasParking: false
+            },
+            corkage: {
+              allowed: false
+            },
+            specialDiscounts: {
+              hasDiscounts: false
+            },
+            holidayEvents: {
+              hasEvents: false
+            },
+            specialEvents: {
+              hasEvents: false
+            },
+            socialMedia: {
+              instagram: {
+                usesInstagram: false
+              }
+            },
+            birthdayCelebrations: {
+              allowed: false
+            },
+            dressCode: {
+              hasDressCode: false
+            },
+            ageVerification: {
+              acceptedDocuments: []
+            },
+            smokingArea: {
+              hasSmokingArea: false
+            },
+            brunchMenu: {
+              hasBrunchMenu: false
+            }
+          }))
+        }}
         validationSchema={validationSchema}
-        onSubmit={handleSubmit}
+        onSubmit={(values) => {
+          dispatch({ type: 'SET_LOCATION_DETAILS', payload: values.locationDetails });
+          navigate('/menu-groups');
+        }}
       >
         {({ values, setFieldValue }) => (
           <Form className="space-y-8">
-            {values.locationDetails.map((location, index) => (
-              <div
-                key={location.locationId || index}
-                className="bg-white shadow rounded-lg overflow-hidden"
-              >
+            {values.locationDetails.map((location: LocationDetail, index: number) => (
+              <div key={location.locationId || index} className="bg-white shadow rounded-lg overflow-hidden">
                 <button
                   type="button"
                   onClick={() => {
@@ -1148,597 +1101,10 @@ const LocationDetails = () => {
                               <Field
                                 type="number"
                                 name={`locationDetails.${index}.reservationSettings.maxPartySize`}
-                                min="1"
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Reservation Grace Period
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                How long to hold a reservation before marking it as a no-show (in minutes)
-                              </p>
-                              <Field
-                                type="number"
-                                name={`locationDetails.${index}.reservationSettings.gracePeriod`}
-                                min="0"
-                                placeholder="Enter minutes"
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Party Size Requirements
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                Does at least half of the party need to be present to be seated?
-                              </p>
-                              <div className="mt-2 flex items-center space-x-4">
-                                <label className="inline-flex items-center">
-                                  <input
-                                    type="radio"
-                                    name={`locationDetails.${index}.reservationSettings.requireHalfParty`}
-                                    checked={values.locationDetails[index].reservationSettings.requireHalfParty === true}
-                                    onChange={() => setFieldValue(`locationDetails.${index}.reservationSettings.requireHalfParty`, true)}
-                                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-700">Yes</span>
-                                </label>
-                                <label className="inline-flex items-center">
-                                  <input
-                                    type="radio"
-                                    name={`locationDetails.${index}.reservationSettings.requireHalfParty`}
-                                    checked={values.locationDetails[index].reservationSettings.requireHalfParty === false}
-                                    onChange={() => setFieldValue(`locationDetails.${index}.reservationSettings.requireHalfParty`, false)}
-                                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-700">No</span>
-                                </label>
-                              </div>
-                            </div>
-
-                            {values.locationDetails[index].reservationSettings.platform && (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                  Reservation Link
-                                </label>
-                                <p className="mt-1 text-sm text-gray-500">
-                                  Direct link where customers can make reservations
-                                </p>
-                                <Field
-                                  type="url"
-                                  name={`locationDetails.${index}.reservationSettings.reservationLink`}
-                                  placeholder="https://..."
-                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                />
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionTitle>Pickup/Takeout Settings</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Configure which platforms you use for pickup/takeout orders and set your preferred platform for AI promotion
-                      </p>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Pickup/Takeout Platforms
-                          </label>
-                          <p className="mt-1 text-sm text-gray-500">
-                            Select all platforms where customers can place pickup/takeout orders
-                          </p>
-                          <div className="mt-2 space-y-2">
-                            {PICKUP_DELIVERY_PLATFORMS.map(platform => (
-                              <div key={platform} className="flex items-center">
-                                <Field
-                                  type="checkbox"
-                                  name={`locationDetails.${index}.pickupSettings.platforms`}
-                                  value={platform}
-                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                />
-                                <label className="ml-2 text-sm text-gray-700">
-                                  {platform.replace(/_/g, ' ')}
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {values.locationDetails[index].pickupSettings.platforms.length > 0 && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                              Preferred Platform for AI Promotion
-                            </label>
-                            <p className="mt-1 text-sm text-gray-500">
-                              Select which platform you want the AI to promote when customers call
-                            </p>
-                            <Field
-                              as="select"
-                              name={`locationDetails.${index}.pickupSettings.preferredPlatform`}
-                              className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            >
-                              <option value="">Select preferred platform...</option>
-                              {values.locationDetails[index].pickupSettings.platforms.map(platform => (
-                                <option key={platform} value={platform}>
-                                  {platform.replace(/_/g, ' ')}
-                                </option>
-                              ))}
-                            </Field>
-                          </div>
-                        )}
-
-                        {values.locationDetails[index].pickupSettings.preferredPlatform && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                              Platform Link
-                            </label>
-                            <p className="mt-1 text-sm text-gray-500">
-                              Enter the direct link to your location on the preferred platform
-                            </p>
-                            <Field
-                              type="url"
-                              name={`locationDetails.${index}.pickupSettings.preferredPlatformLink`}
-                              placeholder="https://..."
-                              className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionTitle>Delivery Settings</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Configure which platforms you use for delivery orders and set your preferred platform for AI promotion
-                      </p>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Delivery Platforms
-                          </label>
-                          <p className="mt-1 text-sm text-gray-500">
-                            Select all platforms where customers can place delivery orders
-                          </p>
-                          <div className="mt-2 space-y-2">
-                            {PICKUP_DELIVERY_PLATFORMS.map(platform => (
-                              <div key={platform} className="flex items-center">
-                                <Field
-                                  type="checkbox"
-                                  name={`locationDetails.${index}.deliverySettings.platforms`}
-                                  value={platform}
-                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                />
-                                <label className="ml-2 text-sm text-gray-700">
-                                  {platform.replace(/_/g, ' ')}
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {values.locationDetails[index].deliverySettings.platforms.length > 0 && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                              Preferred Platform for AI Promotion
-                            </label>
-                            <p className="mt-1 text-sm text-gray-500">
-                              Select which platform you want the AI to promote when customers call
-                            </p>
-                            <Field
-                              as="select"
-                              name={`locationDetails.${index}.deliverySettings.preferredPlatform`}
-                              className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            >
-                              <option value="">Select preferred platform...</option>
-                              {values.locationDetails[index].deliverySettings.platforms.map(platform => (
-                                <option key={platform} value={platform}>
-                                  {platform.replace(/_/g, ' ')}
-                                </option>
-                              ))}
-                            </Field>
-                          </div>
-                        )}
-
-                        {values.locationDetails[index].deliverySettings.preferredPlatform && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                              Platform Link
-                            </label>
-                            <p className="mt-1 text-sm text-gray-500">
-                              Enter the direct link to your location on the preferred platform
-                            </p>
-                            <Field
-                              type="url"
-                              name={`locationDetails.${index}.deliverySettings.preferredPlatformLink`}
-                              placeholder="https://..."
-                              className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionTitle>Parking Information</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Configure parking availability and details for this location
-                      </p>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-4">
-                          <span className="text-sm font-medium text-gray-700">Does this location have parking available?</span>
-                          <div className="flex items-center space-x-4">
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.parking.hasParking`}
-                                checked={values.locationDetails[index].parking.hasParking === true}
-                                onChange={() => setFieldValue(`locationDetails.${index}.parking.hasParking`, true)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Yes</span>
-                            </label>
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.parking.hasParking`}
-                                checked={values.locationDetails[index].parking.hasParking === false}
-                                onChange={() => setFieldValue(`locationDetails.${index}.parking.hasParking`, false)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">No</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        {values.locationDetails[index].parking.hasParking && (
-                          <div className="space-y-4 border border-gray-200 rounded-lg p-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Parking Type
-                              </label>
-                              <div className="mt-2 flex items-center space-x-4">
-                                <label className="inline-flex items-center">
-                                  <input
-                                    type="radio"
-                                    name={`locationDetails.${index}.parking.parkingType`}
-                                    checked={values.locationDetails[index].parking.parkingType === 'free'}
-                                    onChange={() => setFieldValue(`locationDetails.${index}.parking.parkingType`, 'free')}
-                                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-700">Free</span>
-                                </label>
-                                <label className="inline-flex items-center">
-                                  <input
-                                    type="radio"
-                                    name={`locationDetails.${index}.parking.parkingType`}
-                                    checked={values.locationDetails[index].parking.parkingType === 'paid'}
-                                    onChange={() => setFieldValue(`locationDetails.${index}.parking.parkingType`, 'paid')}
-                                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-700">Paid</span>
-                                </label>
-                              </div>
-                            </div>
-
-                            {values.locationDetails[index].parking.parkingType === 'paid' && (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                  Pricing Details
-                                </label>
-                                <p className="mt-1 text-sm text-gray-500">
-                                  Specify the parking rates and payment methods
-                                </p>
-                                <Field
-                                  as="textarea"
-                                  name={`locationDetails.${index}.parking.pricingDetails`}
-                                  rows={3}
-                                  placeholder="e.g., $2/hour, $10 flat rate after 6 PM, validation available with purchase"
-                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                />
-                              </div>
-                            )}
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Parking Location
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                Provide details about where customers can find parking
-                              </p>
-                              <Field
-                                as="textarea"
-                                name={`locationDetails.${index}.parking.location`}
-                                rows={3}
-                                placeholder="e.g., Underground garage entrance on Main St, Street parking available on Oak Ave"
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                               />
                             </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionTitle>Average Wait Times for Walk-ins</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Configure the typical wait times for walk-in customers during different time periods
-                      </p>
-                      
-                      <div className="space-y-2 border border-gray-200 rounded-lg divide-y">
-                        {DAYS_OF_WEEK.map((day) => (
-                          <div key={day} className="overflow-hidden">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (expandedLocations.includes(`${location.locationId}-${day}-wait-times`)) {
-                                  setExpandedLocations(expandedLocations.filter(id => id !== `${location.locationId}-${day}-wait-times`))
-                                } else {
-                                  setExpandedLocations([...expandedLocations, `${location.locationId}-${day}-wait-times`])
-                                }
-                              }}
-                              className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 focus:outline-none"
-                            >
-                              <h4 className="text-sm font-medium text-gray-900 capitalize">
-                                {day}
-                              </h4>
-                              {expandedLocations.includes(`${location.locationId}-${day}-wait-times`) ? (
-                                <ChevronUpIcon className="h-5 w-5 text-gray-400" />
-                              ) : (
-                                <ChevronDownIcon className="h-5 w-5 text-gray-400" />
-                              )}
-                            </button>
-
-                            {expandedLocations.includes(`${location.locationId}-${day}-wait-times`) && (
-                              <div className="border-t border-gray-200">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                  <thead className="bg-gray-50">
-                                    <tr>
-                                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Time Period
-                                      </th>
-                                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Average Wait Time
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="bg-white divide-y divide-gray-200">
-                                    {TIME_SLOTS.map((slot) => (
-                                      <tr key={slot.id}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                          {slot.label}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                          <div className="flex gap-2">
-                                            {WAIT_TIME_RANGES.map((range) => (
-                                              <button
-                                                key={range.value}
-                                                type="button"
-                                                onClick={() => setFieldValue(
-                                                  `locationDetails.${index}.waitTimes.${day}.${slot.id}`,
-                                                  range.value
-                                                )}
-                                                className={`px-3 py-2 rounded-md text-sm font-medium ${range.color} ${
-                                                  values.locationDetails[index].waitTimes?.[day as keyof WaitTimes]?.[slot.id] === range.value
-                                                    ? 'ring-2 ring-indigo-500'
-                                                    : ''
-                                                }`}
-                                              >
-                                                {range.label}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionTitle>Age Verification Documents</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Select which documents are accepted to verify the legal drinking age
-                      </p>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Accepted Documents
-                          </label>
-                          <div className="mt-2 space-y-2">
-                            {AGE_VERIFICATION_DOCUMENTS.map(doc => (
-                              <div key={doc} className="flex items-center">
-                                <Field
-                                  type="checkbox"
-                                  name={`locationDetails.${index}.ageVerification.acceptedDocuments`}
-                                  value={doc}
-                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                />
-                                <label className="ml-2 text-sm text-gray-700">
-                                  {doc.replace(/_/g, ' ')}
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {values.locationDetails[index].ageVerification.acceptedDocuments.includes('OTHER') && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                              Other Accepted Documents
-                            </label>
-                            <Field
-                              type="text"
-                              name={`locationDetails.${index}.ageVerification.otherDocuments`}
-                              placeholder="Please specify other accepted documents"
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionTitle>Smoking Area</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Specify if your establishment has a designated smoking area
-                      </p>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-4">
-                          <span className="text-sm font-medium text-gray-700">Do you offer a smoking area?</span>
-                          <div className="flex items-center space-x-4">
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.smokingArea.hasSmokingArea`}
-                                checked={values.locationDetails[index].smokingArea.hasSmokingArea === true}
-                                onChange={() => setFieldValue(`locationDetails.${index}.smokingArea.hasSmokingArea`, true)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Yes</span>
-                            </label>
-                              <label className="inline-flex items-center">
-                                <input
-                                  type="radio"
-                                  name={`locationDetails.${index}.smokingArea.hasSmokingArea`}
-                                  checked={values.locationDetails[index].smokingArea.hasSmokingArea === false}
-                                  onChange={() => setFieldValue(`locationDetails.${index}.smokingArea.hasSmokingArea`, false)}
-                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                />
-                                <span className="ml-2 text-sm text-gray-700">No</span>
-                              </label>
-                            </div>
-                          </div>
-
-                          {values.locationDetails[index].smokingArea.hasSmokingArea && (
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Smoking Area Details
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                Provide details about the smoking area location and any specific rules
-                              </p>
-                              <Field
-                                as="textarea"
-                                name={`locationDetails.${index}.smokingArea.details`}
-                                rows={3}
-                                placeholder="e.g., Outdoor patio on the east side, covered area with heaters"
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <SectionTitle>Brunch Menu</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Specify if you offer a brunch menu and provide the schedule
-                      </p>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-4">
-                          <span className="text-sm font-medium text-gray-700">Do you offer a brunch menu?</span>
-                          <div className="flex items-center space-x-4">
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.brunchMenu.hasBrunchMenu`}
-                                checked={values.locationDetails[index].brunchMenu.hasBrunchMenu === true}
-                                onChange={() => setFieldValue(`locationDetails.${index}.brunchMenu.hasBrunchMenu`, true)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Yes</span>
-                            </label>
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.brunchMenu.hasBrunchMenu`}
-                                checked={values.locationDetails[index].brunchMenu.hasBrunchMenu === false}
-                                onChange={() => setFieldValue(`locationDetails.${index}.brunchMenu.hasBrunchMenu`, false)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">No</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        {values.locationDetails[index].brunchMenu.hasBrunchMenu && (
-                          <>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Brunch Schedule
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                Specify which days you offer brunch and during what hours
-                              </p>
-                              <Field
-                                as="textarea"
-                                name={`locationDetails.${index}.brunchMenu.schedule`}
-                                rows={3}
-                                placeholder="e.g., Saturday and Sunday, 10 AM - 2 PM"
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Brunch Menu File
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                If you have a digital or PDF version of your brunch menu, you can attach it here
-                              </p>
-                              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                                <div className="space-y-1 text-center">
-                                  <svg
-                                    className="mx-auto h-12 w-12 text-gray-400"
-                                    stroke="currentColor"
-                                    fill="none"
-                                    viewBox="0 0 48 48"
-                                    aria-hidden="true"
-                                  >
-                                    <path
-                                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                                      strokeWidth={2}
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    />
-                                  </svg>
-                                  <div className="flex text-sm text-gray-600">
-                                    <label
-                                      htmlFor={`brunch-menu-file-${index}`}
-                                      className="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500"
-                                    >
-                                      <span>Upload a file</span>
-                                      <input
-                                        id={`brunch-menu-file-${index}`}
-                                        type="file"
-                                        className="sr-only"
-                                        accept=".pdf,.doc,.docx"
-                                        onChange={(event) => {
-                                          const file = event.currentTarget.files?.[0]
-                                          setFieldValue(`locationDetails.${index}.brunchMenu.menuFile`, file || null)
-                                        }}
-                                      />
-                                    </label>
-                                    <p className="pl-1">or drag and drop</p>
-                                  </div>
-                                  <p className="text-xs text-gray-500">PDF, DOC, DOCX up to 10MB</p>
-                                </div>
-                              </div>
-                            </div>
-                          </>
                         )}
                       </div>
                     </div>
@@ -1746,7 +1112,6 @@ const LocationDetails = () => {
                 )}
               </div>
             ))}
-
             <div className="flex justify-between">
               <button
                 type="button"
@@ -1765,5 +1130,3 @@ const LocationDetails = () => {
     </div>
   )
 }
-
-export default LocationDetails 
