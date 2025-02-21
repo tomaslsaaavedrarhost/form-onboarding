@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Formik, Form, Field } from 'formik'
 import * as Yup from 'yup'
 import { useForm } from '../context/FormContext'
+import { FormikErrors, FormikTouched } from 'formik'
 
 interface LocationPolicy {
   locationId: string
@@ -19,6 +20,19 @@ interface GroupPolicy {
   tipDetails: string
   hasServiceCharge: boolean
   serviceChargeDetails: string
+}
+
+interface PolicyObject {
+  hasTips: 'yes' | 'no' | 'depends'
+  tipDetails: string
+  hasServiceCharge: boolean
+  serviceChargeDetails: string
+}
+
+interface TipsPolicyState {
+  useGroups: boolean
+  locationPolicies: { [key: string]: PolicyObject }
+  groupPolicies: { [key: string]: PolicyObject }
 }
 
 interface FormValues {
@@ -97,7 +111,7 @@ export default function TipsPolicy() {
 
   const handleSubmit = (values: FormValues) => {
     // Convert array policies to object format
-    const locationPolicies: { [key: string]: any } = {}
+    const locationPolicies: { [key: string]: PolicyObject } = {}
     values.locationPolicies.forEach(policy => {
       locationPolicies[policy.locationId] = {
         hasTips: policy.hasTips,
@@ -107,7 +121,7 @@ export default function TipsPolicy() {
       }
     })
 
-    const groupPolicies: { [key: string]: any } = {}
+    const groupPolicies: { [key: string]: PolicyObject } = {}
     values.groupPolicies.forEach(policy => {
       groupPolicies[policy.groupId] = {
         hasTips: policy.hasTips,
@@ -129,7 +143,7 @@ export default function TipsPolicy() {
   }
 
   const handleFieldChange = (field: string, value: any) => {
-    const currentState = { ...state.tipsPolicy }
+    const currentState = { ...state.tipsPolicy } as TipsPolicyState
     if (field.startsWith('locationPolicies.')) {
       const [, locationId, prop] = field.split('.')
       currentState.locationPolicies[locationId] = {
@@ -143,7 +157,7 @@ export default function TipsPolicy() {
         [prop]: value
       }
     } else {
-      currentState[field] = value
+      (currentState as any)[field] = value
     }
 
     dispatch({
@@ -154,9 +168,9 @@ export default function TipsPolicy() {
 
   const renderPolicyFields = (
     prefix: string,
-    values: any,
-    errors: any,
-    touched: any,
+    values: PolicyObject,
+    errors: FormikErrors<LocationPolicy> | FormikErrors<GroupPolicy>,
+    touched: FormikTouched<LocationPolicy> | FormikTouched<GroupPolicy>,
     name: string
   ) => (
     <div className="space-y-6">
@@ -331,8 +345,8 @@ export default function TipsPolicy() {
                     {renderPolicyFields(
                       `locationPolicies.${index}`,
                       policy,
-                      errors.locationPolicies?.[index],
-                      touched.locationPolicies?.[index],
+                      errors.locationPolicies?.[index] as FormikErrors<LocationPolicy>,
+                      touched.locationPolicies?.[index] as FormikTouched<LocationPolicy>,
                       location?.name || ''
                     )}
                   </div>
@@ -356,8 +370,8 @@ export default function TipsPolicy() {
                     {renderPolicyFields(
                       `groupPolicies.${index}`,
                       policy,
-                      errors.groupPolicies?.[index],
-                      touched.groupPolicies?.[index],
+                      errors.groupPolicies?.[index] as FormikErrors<GroupPolicy>,
+                      touched.groupPolicies?.[index] as FormikTouched<GroupPolicy>,
                       policy.groupId
                     )}
                   </div>

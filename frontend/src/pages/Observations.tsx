@@ -79,7 +79,7 @@ export default function Observations() {
                 rows={6}
                 className="input-field mt-2"
                 placeholder="Enter any additional information that might be relevant for the AI assistant configuration..."
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                   handleFieldChange('additionalNotes', e.target.value)
                 }}
               />
@@ -96,7 +96,7 @@ export default function Observations() {
                     name="termsAccepted"
                     id="termsAccepted"
                     className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-600"
-                    onChange={(e) => {
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       handleFieldChange('termsAccepted', e.target.checked)
                     }}
                   />
