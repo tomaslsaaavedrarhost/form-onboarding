@@ -205,7 +205,7 @@ export const useFormProgress = () => {
 
   // Save form data
   const saveFormData = async () => {
-    if (!user) return;
+    if (!user) return false;
 
     try {
       const docId = formData.isShared && formData.formId ? formData.formId : user.uid;
@@ -332,6 +332,22 @@ export const useFormProgress = () => {
     return await getDownloadURL(fileRef);
   };
 
+  // Add saveField method
+  const saveField = async (fieldName: keyof FormData, value: any): Promise<void> => {
+    if (!user) return;
+    try {
+      const docId = formData.isShared && formData.formId ? formData.formId : user.uid;
+      await setDoc(doc(db, 'formProgress', docId), {
+        [fieldName]: value,
+        lastUpdated: new Date()
+      }, { merge: true });
+    } catch (err) {
+      console.error('Error saving field:', err);
+      setError('Error al guardar el campo');
+      throw err;
+    }
+  };
+
   return {
     formData,
     sharedForms,
@@ -345,6 +361,7 @@ export const useFormProgress = () => {
     switchForm,
     shareForm,
     removeSharing,
-    uploadFile
+    uploadFile,
+    saveField
   };
 }; 

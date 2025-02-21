@@ -4,6 +4,7 @@ import { useTranslation } from '../hooks/useTranslation'
 import { useFormProgress } from '../hooks/useFormProgress'
 import { Formik, Form, Field } from 'formik'
 import * as Yup from 'yup'
+import { FormData } from '../hooks/useFormProgress'
 
 interface FormValues {
   contactName: string
@@ -42,12 +43,12 @@ export default function ContactInfo() {
     sameForAllLocations: formData.sameForAllLocations ?? false,
   }
 
-  const handleFieldChange = (field: string, value: any) => {
+  const handleFieldChange = (field: keyof FormData, value: any) => {
     updateField(field, value)
   }
 
   const handleSubmit = (values: FormValues) => {
-    Object.entries(values).forEach(([field, value]) => {
+    (Object.entries(values) as [keyof FormData, any][]).forEach(([field, value]) => {
       updateField(field, value)
     })
     navigate('/onboarding/location-details')

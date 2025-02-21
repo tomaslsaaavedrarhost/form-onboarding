@@ -1,6 +1,6 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useFormProgress } from '../hooks/useFormProgress'
+import { useFormProgress, FormData } from '../hooks/useFormProgress'
 import { useTranslation } from '../hooks/useTranslation'
 import { Formik, Form, Field } from 'formik'
 import * as Yup from 'yup'
@@ -25,12 +25,12 @@ export default function Observations() {
     termsAccepted: formData.termsAccepted || false,
   }
 
-  const handleFieldChange = (field: string, value: any) => {
+  const handleFieldChange = (field: keyof FormData, value: any) => {
     updateField(field, value)
   }
 
   const handleSubmit = (values: FormValues) => {
-    Object.entries(values).forEach(([field, value]) => {
+    (Object.entries(values) as [keyof FormData, any][]).forEach(([field, value]) => {
       updateField(field, value)
     })
     navigate('/onboarding/review')

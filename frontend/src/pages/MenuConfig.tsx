@@ -84,7 +84,7 @@ export default function MenuConfig() {
   }
 
   const handleFieldChange = (groupIndex: number, field: string, value: any) => {
-    const updatedGroups = [...formData.menuGroups]
+    const updatedGroups = [...(formData.menuGroups || [])]
     if (!updatedGroups[groupIndex]) {
       updatedGroups[groupIndex] = {
         name: '',

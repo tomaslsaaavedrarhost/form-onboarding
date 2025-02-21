@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useForm } from '../lib/FormContext'
+import { useFormProgress } from '../hooks/useFormProgress'
 import { useTranslation } from '../hooks/useTranslation'
 
 interface Location {
@@ -16,11 +16,13 @@ interface Group {
 }
 
 interface FormState {
+  businessName: string
   legalBusinessName: string
   restaurantType: string
   otherRestaurantType: string
   taxId: string
   irsLetter: File | null
+  legalDocuments: string[]
   locationCount: number
   sameMenuForAll: boolean
   locations: Location[]
@@ -43,19 +45,21 @@ const restaurantTypes = [
 
 const LegalData = () => {
   const navigate = useNavigate()
-  const { formData, saveField, loading, error } = useForm()
-  const [localData, setLocalData] = useState<FormState>({
-    legalBusinessName: '',
-    restaurantType: '',
-    otherRestaurantType: '',
-    taxId: '',
-    irsLetter: null,
-    locationCount: 1,
-    sameMenuForAll: true,
-    locations: [],
-    groups: []
-  })
   const { t } = useTranslation()
+  const { formData, updateField, updateFormData, uploadFile } = useFormProgress()
+  const [localData, setLocalData] = useState<FormState>({
+    businessName: formData.businessName || '',
+    legalBusinessName: formData.legalBusinessName || '',
+    restaurantType: formData.restaurantType || '',
+    otherRestaurantType: formData.otherRestaurantType || '',
+    taxId: formData.taxId || '',
+    irsLetter: formData.irsLetter || null,
+    legalDocuments: formData.legalDocuments || [],
+    locationCount: formData.locationCount || 1,
+    sameMenuForAll: formData.sameMenuForAll ?? true,
+    locations: formData.locations || [{ name: '', nameConfirmed: false }],
+    groups: formData.groups || []
+  })
 
   // Cargar datos existentes
   useEffect(() => {
@@ -75,14 +79,14 @@ const LegalData = () => {
     }
   }, [formData])
 
-  // Manejar cambios en los campos con debounce
+  // Manejar cambios en los campos
   const handleFieldChange = async (
     fieldName: keyof FormState,
     value: any
   ) => {
     if (fieldName === 'locationCount') {
-      const newValue = parseInt(value);
-      if (isNaN(newValue) || newValue < 1 || newValue > 50) return;
+      const newValue = parseInt(value)
+      if (isNaN(newValue) || newValue < 1 || newValue > 50) return
 
       // Primero actualizamos el estado local
       const updatedLocations = newValue === 1 
@@ -92,7 +96,7 @@ const LegalData = () => {
             ...Array(Math.max(0, newValue - localData.locations.length))
               .fill(null)
               .map(() => ({ name: '', nameConfirmed: false }))
-          ];
+          ]
 
       const updatedData = {
         ...localData,
@@ -102,26 +106,20 @@ const LegalData = () => {
           sameMenuForAll: true,
           groups: []
         } : {})
-      };
+      }
 
       // Actualizamos el estado local inmediatamente
-      setLocalData(updatedData);
+      setLocalData(updatedData)
 
-      try {
-        // Guardamos en Firebase de manera atómica
-        await Promise.all([
-          saveField('locationCount', newValue),
-          saveField('locations', updatedLocations),
-          ...(newValue === 1 ? [
-            saveField('sameMenuForAll', true),
-            saveField('groups', [])
-          ] : [])
-        ]);
-      } catch (error) {
-        console.error('Error al guardar los cambios:', error);
-        // Revertir cambios locales si hay error
-        setLocalData(localData);
-      }
+      // Actualizamos el estado global
+      updateFormData({
+        locationCount: newValue,
+        locations: updatedLocations,
+        ...(newValue === 1 ? {
+          sameMenuForAll: true,
+          groups: []
+        } : {})
+      })
     } else if (fieldName === 'sameMenuForAll' && value === false) {
       // Si se desmarca "mismo menú para todas", crear dos grupos por defecto
       const defaultGroups = [
@@ -135,23 +133,19 @@ const LegalData = () => {
           name: generateGroupName(1), 
           locations: [] 
         }
-      ];
+      ]
       setLocalData(prev => ({ 
         ...prev, 
         [fieldName]: value,
         groups: defaultGroups
-      }));
-      await saveField('groups', defaultGroups);
-      await saveField('sameMenuForAll', value);
+      }))
+      updateFormData({
+        [fieldName]: value,
+        groups: defaultGroups
+      })
     } else {
-      setLocalData(prev => ({ ...prev, [fieldName]: value }));
-      
-      // Guardar después de 500ms de inactividad
-      const timeoutId = setTimeout(() => {
-        saveField(fieldName, value);
-      }, 500);
-
-      return () => clearTimeout(timeoutId);
+      setLocalData(prev => ({ ...prev, [fieldName]: value }))
+      updateField(fieldName, value)
     }
   }
 
@@ -161,7 +155,8 @@ const LegalData = () => {
     if (file) {
       try {
         setLocalData(prev => ({ ...prev, irsLetter: file }))
-        await saveField('legalDocuments', [file.name], file)
+        const fileUrl = await uploadFile(file, 'legalDocuments')
+        updateField('legalDocuments', [fileUrl])
       } catch (err) {
         console.error('Error al subir el archivo:', err)
       }
@@ -176,7 +171,7 @@ const LegalData = () => {
     }
     newLocations[index].name = value
     setLocalData(prev => ({ ...prev, locations: newLocations }))
-    saveField('locations', newLocations)
+    updateField('locations', newLocations)
   }
 
   // Manejar confirmación de nombres de ubicación
@@ -184,7 +179,7 @@ const LegalData = () => {
     const newLocations = [...localData.locations]
     newLocations[index].nameConfirmed = true
     setLocalData(prev => ({ ...prev, locations: newLocations }))
-    saveField('locations', newLocations)
+    updateField('locations', newLocations)
   }
 
   // Manejar cambios en grupos
@@ -210,25 +205,17 @@ const LegalData = () => {
 
     newGroups[index][field] = value
     setLocalData(prev => ({ ...prev, groups: newGroups }))
-    saveField('groups', newGroups)
+    updateField('groups', newGroups)
   }
 
   // Generar nombre de grupo automáticamente
   const generateGroupName = (index: number) => {
-    const numbers = ['Primer', 'Segundo', 'Tercer', 'Cuarto', 'Quinto', 'Sexto', 'Séptimo', 'Octavo', 'Noveno', 'Décimo']
-    return `${numbers[index] || `Grupo ${index + 1}`} grupo`
+    const names = ['Grupo A', 'Grupo B', 'Grupo C', 'Grupo D']
+    return names[index] || `Grupo ${index + 1}`
   }
 
   const handleNext = () => {
     navigate('/onboarding/contact-info')
-  }
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-purple"></div>
-      </div>
-    )
   }
 
   return (
@@ -239,12 +226,6 @@ const LegalData = () => {
           Por favor, ingresa los datos legales de tu negocio.
         </p>
       </div>
-
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-4">
-          <p className="text-red-700">{error}</p>
-        </div>
-      )}
 
       <div className="space-y-4">
         <div>
@@ -436,7 +417,7 @@ const LegalData = () => {
                   }
                 ]
                 setLocalData(prev => ({ ...prev, groups: newGroups }))
-                saveField('groups', newGroups)
+                updateField('groups', newGroups)
               }}
               className="btn-secondary"
             >
@@ -452,7 +433,7 @@ const LegalData = () => {
                       onClick={() => {
                         const newGroups = localData.groups.filter((_, i) => i !== index);
                         setLocalData(prev => ({ ...prev, groups: newGroups }));
-                        saveField('groups', newGroups);
+                        updateField('groups', newGroups);
                       }}
                       className="text-red-600 hover:text-red-800 transition-colors duration-200"
                     >

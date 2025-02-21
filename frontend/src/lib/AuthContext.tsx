@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { 
   User, 
-  signOut, 
+  signOut as firebaseSignOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  onAuthStateChanged
 } from 'firebase/auth'
 import { auth } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -17,6 +18,7 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<void>
   logout: () => Promise<void>
   error: string | null
+  signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -29,7 +31,7 @@ export const useAuth = () => {
   return context
 }
 
-function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,7 +41,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     console.log('Setting up auth state listener...')
     
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log('Auth state changed:', {
         hasUser: user ? 'Yes' : 'No',
         userEmail: user?.email || 'N/A',
@@ -141,10 +143,20 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       setError(null)
-      await signOut(auth)
+      await firebaseSignOut(auth)
       navigate('/login', { replace: true })
     } catch (error: any) {
       console.error('Error during logout:', error)
+      setError('Error al cerrar sesión.')
+      throw error
+    }
+  }
+
+  const signOut = async () => {
+    try {
+      await firebaseSignOut(auth)
+    } catch (error: any) {
+      console.error('Error signing out:', error)
       setError('Error al cerrar sesión.')
       throw error
     }
@@ -157,7 +169,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
     login,
     resetPassword,
     logout,
-    error
+    error,
+    signOut
   }
 
   return (

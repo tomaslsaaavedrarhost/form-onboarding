@@ -6,11 +6,16 @@ interface FormContextType {
   sharedForms: FormData[];
   loading: boolean;
   error: string | null;
-  saveField: (fieldName: keyof FormData, value: any, file?: File) => Promise<void>;
-  saveFormData: (data: Partial<FormData>) => Promise<void>;
-  uploadFile: (file: File, path: string) => Promise<string>;
+  unsavedChanges: boolean;
+  selectedFormId: string | null;
+  updateField: (fieldName: keyof FormData, value: any) => void;
+  updateFormData: (newData: Partial<FormData>) => void;
+  saveFormData: () => Promise<boolean>;
+  switchForm: (formId: string) => Promise<void>;
   shareForm: (recipientEmail: string) => Promise<void>;
   removeSharing: (recipientEmail: string) => Promise<void>;
+  uploadFile: (file: File, path: string) => Promise<string>;
+  saveField: (fieldName: keyof FormData, value: any) => Promise<void>;
 }
 
 const FormContext = createContext<FormContextType | null>(null);
