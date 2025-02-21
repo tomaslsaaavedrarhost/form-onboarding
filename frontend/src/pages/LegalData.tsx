@@ -61,93 +61,59 @@ const LegalData = () => {
     groups: formData.groups || []
   })
 
-  // Cargar datos existentes
-  useEffect(() => {
-    if (formData) {
-      const locationCount = typeof formData.locationCount === 'number' ? formData.locationCount : 1;
-      setLocalData(prev => ({
-        ...prev,
-        legalBusinessName: formData.businessName || '',
-        taxId: formData.taxId || '',
-        restaurantType: formData.restaurantType || '',
-        otherRestaurantType: formData.otherRestaurantType || '',
-        locationCount: locationCount,
-        sameMenuForAll: formData.sameMenuForAll ?? true,
-        locations: formData.locations || Array(locationCount).fill(null).map(() => ({ name: '', nameConfirmed: false })),
-        groups: formData.groups || []
-      }))
-    }
-  }, [formData])
+  // Agregar estado para manejar errores de ubicaciones
+  const [locationErrors, setLocationErrors] = useState<{ [key: number]: string }>({});
 
-  // Manejar cambios en los campos
-  const handleFieldChange = async (
+  // Función para verificar si un nombre de ubicación está duplicado
+  const isDuplicateLocationName = (name: string, currentIndex: number): boolean => {
+    return localData.locations.some(
+      (location, index) => 
+        index !== currentIndex && 
+        location.name.trim().toLowerCase() === name.trim().toLowerCase()
+    );
+  };
+
+  // Optimizamos el useEffect para que solo actualice cuando realmente cambie formData
+  useEffect(() => {
+    if (!formData) return;
+    
+    const hasChanges = Object.entries(formData).some(([key, value]) => {
+      return localData[key as keyof FormState] !== value;
+    });
+
+    if (!hasChanges) return;
+
+    const locationCount = typeof formData.locationCount === 'number' ? formData.locationCount : 1;
+    setLocalData(prev => ({
+      ...prev,
+      ...formData,
+      locationCount,
+      locations: formData.locations || Array(locationCount).fill(null).map(() => ({ name: '', nameConfirmed: false }))
+    }));
+  }, [formData]);
+
+  // Optimizamos el handleFieldChange para manejar inputs de forma más eficiente
+  const handleFieldChange = (
     fieldName: keyof FormState,
     value: any
   ) => {
-    if (fieldName === 'locationCount') {
-      const newValue = parseInt(value)
-      if (isNaN(newValue) || newValue < 1 || newValue > 50) return
+    // Actualizamos inmediatamente el estado local para mejor respuesta UI
+    setLocalData(prev => ({ ...prev, [fieldName]: value }));
 
-      // Primero actualizamos el estado local
-      const updatedLocations = newValue === 1 
-        ? localData.locations.slice(0, 1).map(loc => ({ ...loc, groupId: undefined }))
-        : [
-            ...localData.locations.slice(0, newValue),
-            ...Array(Math.max(0, newValue - localData.locations.length))
-              .fill(null)
-              .map(() => ({ name: '', nameConfirmed: false }))
-          ]
-
-      const updatedData = {
-        ...localData,
-        locationCount: newValue,
-        locations: updatedLocations,
-        ...(newValue === 1 ? {
-          sameMenuForAll: true,
-          groups: []
-        } : {})
+    // Para campos de texto, actualizamos el estado global después de que el usuario termine de escribir
+    if (typeof value === 'string' && ['legalBusinessName', 'taxId', 'otherRestaurantType'].includes(fieldName)) {
+      if ((window as any).fieldUpdateTimeout) {
+        clearTimeout((window as any).fieldUpdateTimeout);
       }
-
-      // Actualizamos el estado local inmediatamente
-      setLocalData(updatedData)
-
-      // Actualizamos el estado global
-      updateFormData({
-        locationCount: newValue,
-        locations: updatedLocations,
-        ...(newValue === 1 ? {
-          sameMenuForAll: true,
-          groups: []
-        } : {})
-      })
-    } else if (fieldName === 'sameMenuForAll' && value === false) {
-      // Si se desmarca "mismo menú para todas", crear dos grupos por defecto
-      const defaultGroups = [
-        { 
-          id: Date.now().toString(), 
-          name: generateGroupName(0), 
-          locations: [] 
-        },
-        { 
-          id: (Date.now() + 1).toString(), 
-          name: generateGroupName(1), 
-          locations: [] 
-        }
-      ]
-      setLocalData(prev => ({ 
-        ...prev, 
-        [fieldName]: value,
-        groups: defaultGroups
-      }))
-      updateFormData({
-        [fieldName]: value,
-        groups: defaultGroups
-      })
-    } else {
-      setLocalData(prev => ({ ...prev, [fieldName]: value }))
-      updateField(fieldName, value)
+      (window as any).fieldUpdateTimeout = setTimeout(() => {
+        updateField(fieldName, value);
+      }, 500);
+      return;
     }
-  }
+
+    // Para otros campos, actualizamos inmediatamente
+    updateField(fieldName, value);
+  };
 
   // Manejar subida de archivos
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -163,24 +129,71 @@ const LegalData = () => {
     }
   }
 
+  // Optimizamos los inputs para evitar re-renders innecesarios
+  const renderInput = (
+    fieldName: keyof FormState,
+    placeholder: string,
+    label: string
+  ) => (
+    <div className="form-group">
+      <label htmlFor={fieldName} className="form-label">
+        {label}
+      </label>
+      <input
+        type="text"
+        id={fieldName}
+        value={localData[fieldName] as string}
+        onChange={(e) => handleFieldChange(fieldName, e.target.value)}
+        className="input-field"
+        placeholder={placeholder}
+      />
+    </div>
+  );
+
   // Manejar cambios en las ubicaciones
   const handleLocationChange = (index: number, value: string) => {
-    const newLocations = [...localData.locations]
+    const newLocations = [...localData.locations];
     if (!newLocations[index]) {
-      newLocations[index] = { name: '', nameConfirmed: false }
+      newLocations[index] = { name: '', nameConfirmed: false };
     }
-    newLocations[index].name = value
-    setLocalData(prev => ({ ...prev, locations: newLocations }))
-    updateField('locations', newLocations)
-  }
+
+    // Verificar duplicados
+    if (value.trim() !== '' && isDuplicateLocationName(value, index)) {
+      setLocationErrors(prev => ({
+        ...prev,
+        [index]: 'Este nombre de ubicación ya existe'
+      }));
+    } else {
+      setLocationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[index];
+        return newErrors;
+      });
+    }
+
+    newLocations[index].name = value;
+    setLocalData(prev => ({ ...prev, locations: newLocations }));
+    
+    if ((window as any).locationUpdateTimeout) {
+      clearTimeout((window as any).locationUpdateTimeout);
+    }
+    (window as any).locationUpdateTimeout = setTimeout(() => {
+      updateField('locations', newLocations);
+    }, 500);
+  };
 
   // Manejar confirmación de nombres de ubicación
   const handleLocationConfirm = (index: number) => {
-    const newLocations = [...localData.locations]
-    newLocations[index].nameConfirmed = true
-    setLocalData(prev => ({ ...prev, locations: newLocations }))
-    updateField('locations', newLocations)
-  }
+    // No permitir confirmar si hay un error
+    if (locationErrors[index]) {
+      return;
+    }
+
+    const newLocations = [...localData.locations];
+    newLocations[index].nameConfirmed = true;
+    setLocalData(prev => ({ ...prev, locations: newLocations }));
+    updateField('locations', newLocations);
+  };
 
   // Manejar cambios en grupos
   const handleGroupChange = (index: number, field: keyof Group, value: any) => {
@@ -220,29 +233,21 @@ const LegalData = () => {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="mb-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Datos Legales</h2>
-        <p className="text-gray-600 mb-6">
+        <p className="text-gray-600">
           Por favor, ingresa los datos legales de tu negocio.
         </p>
       </div>
 
-      <div className="space-y-4">
-        <div>
-          <label htmlFor="legalBusinessName" className="form-label">
-            Nombre Legal del Negocio
-          </label>
-          <input
-            type="text"
-            id="legalBusinessName"
-            value={localData.legalBusinessName}
-            onChange={(e) => handleFieldChange('legalBusinessName', e.target.value)}
-            className="input-field"
-            placeholder="Ingresa el nombre legal de tu negocio"
-          />
-        </div>
+      <div className="form-section">
+        {renderInput(
+          'legalBusinessName',
+          'Ingresa el nombre legal de tu negocio',
+          'Nombre Legal del Negocio'
+        )}
 
-        <div>
+        <div className="form-group">
           <label htmlFor="restaurantType" className="form-label">
             Tipo de Restaurante
           </label>
@@ -261,45 +266,29 @@ const LegalData = () => {
           </select>
         </div>
 
-        {localData.restaurantType === 'other' && (
-          <div>
-            <label htmlFor="otherRestaurantType" className="form-label">
-              Especifica el tipo de restaurante
-            </label>
-            <input
-              type="text"
-              id="otherRestaurantType"
-              value={localData.otherRestaurantType}
-              onChange={(e) => handleFieldChange('otherRestaurantType', e.target.value)}
-              className="input-field"
-              placeholder="Describe el tipo de restaurante"
-            />
-          </div>
+        {localData.restaurantType === 'other' && 
+          renderInput(
+            'otherRestaurantType',
+            'Describe el tipo de restaurante',
+            'Especifica el tipo de restaurante'
+          )
+        }
+
+        {renderInput(
+          'taxId',
+          'Ingresa tu EIN Number',
+          'EIN Number'
         )}
 
-        <div>
-          <label htmlFor="taxId" className="form-label">
-            EIN Number
-          </label>
-          <input
-            type="text"
-            id="taxId"
-            value={localData.taxId}
-            onChange={(e) => handleFieldChange('taxId', e.target.value)}
-            className="input-field"
-            placeholder="Ingresa tu EIN Number"
-          />
-        </div>
-
-        <div>
+        <div className="form-group">
           <label className="form-label">
-            EIN Letter (opcional)
+            EIN Confirmation Letter: IRS approval letter for your company
           </label>
           <div className="mt-1">
             <div className="flex items-center justify-center w-full">
               <label
                 htmlFor="file-upload"
-                className="w-full flex flex-col items-center px-4 py-6 border-2 border-gray-300 border-dashed rounded-md cursor-pointer hover:border-brand-purple"
+                className="file-upload-field"
               >
                 <span className="text-brand-purple">Subir EIN Letter</span>
                 <input
@@ -314,20 +303,20 @@ const LegalData = () => {
             </div>
           </div>
           {formData.legalDocuments && (
-            <div className="mt-2">
+            <div className="mt-4">
               <h4 className="text-sm font-medium text-gray-900">Documentos cargados:</h4>
-              <ul className="mt-1 text-sm text-gray-500">
+              <ul className="mt-2 text-sm text-gray-500">
                 {formData.legalDocuments.map((doc, index) => (
-                  <li key={index}>{doc}</li>
+                  <li key={index} className="py-1">{doc}</li>
                 ))}
               </ul>
             </div>
           )}
         </div>
 
-        <div>
+        <div className="form-group">
           <label htmlFor="locationCount" className="form-label">
-            Número de Ubicaciones
+            Cantidad de Ubicaciones
           </label>
           <input
             type="number"
@@ -338,74 +327,87 @@ const LegalData = () => {
             onChange={(e) => {
               const val = parseInt(e.target.value);
               if (!isNaN(val) && val >= 1 && val <= 50) {
-                // Actualizar el estado local inmediatamente para mejor respuesta UI
                 setLocalData(prev => ({
                   ...prev,
                   locationCount: val
                 }));
                 
-                // Usar setTimeout para dar tiempo a que el usuario termine de ajustar
                 clearTimeout((window as any).locationUpdateTimeout);
                 (window as any).locationUpdateTimeout = setTimeout(() => {
                   handleFieldChange('locationCount', val);
                 }, 300);
               }
             }}
-            onBlur={(e) => {
-              const val = parseInt(e.target.value);
-              if (!isNaN(val) && val >= 1 && val <= 50) {
-                handleFieldChange('locationCount', val);
-              }
-            }}
             className="input-field"
           />
         </div>
 
-        {/* Mostrar checkbox solo si hay más de una ubicación */}
         {localData.locationCount > 1 && (
-          <div>
-            <label className="form-label flex items-center space-x-2">
+          <div className="form-group">
+            <label className="form-label flex items-center space-x-3">
               <input
                 type="checkbox"
                 checked={localData.sameMenuForAll}
                 onChange={(e) => handleFieldChange('sameMenuForAll', e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-brand-purple focus:ring-brand-orange checked:bg-gradient-brand-reverse"
+                className="checkbox-brand"
               />
               <span>Mismo menú para todas las ubicaciones</span>
             </label>
+            {!localData.sameMenuForAll && (
+              <div className="mt-2 pl-8 space-y-1">
+                <p className="text-sm text-red-600">
+                  Debes tener al menos dos grupos cuando no uses el mismo menú para todas las ubicaciones.
+                </p>
+                <p className="text-sm text-gray-600">
+                  Puedes configurar la cantidad de grupos en la sección siguiente.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Sección de ubicaciones */}
         {Array.from({ length: localData.locationCount }).map((_, index) => (
-          <div key={index} className="space-y-2">
+          <div key={index} className="form-group">
             <label className="form-label">
               Nombre de la Ubicación {index + 1}
             </label>
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={localData.locations[index]?.name || ''}
-                onChange={(e) => handleLocationChange(index, e.target.value)}
-                className="input-field"
-                placeholder={`Nombre de la ubicación ${index + 1}`}
-              />
-              {!localData.locations[index]?.nameConfirmed && (
-                <button
-                  onClick={() => handleLocationConfirm(index)}
-                  className="btn-secondary whitespace-nowrap"
-                >
-                  Confirmar
-                </button>
+            <div className="space-y-2">
+              <div className="flex space-x-3">
+                <input
+                  type="text"
+                  value={localData.locations[index]?.name || ''}
+                  onChange={(e) => handleLocationChange(index, e.target.value)}
+                  className={`input-field ${locationErrors[index] ? 'ring-red-500' : ''}`}
+                  placeholder={`Nombre de la ubicación ${index + 1}`}
+                />
+                {!localData.locations[index]?.nameConfirmed && (
+                  <button
+                    onClick={() => handleLocationConfirm(index)}
+                    className="btn-secondary whitespace-nowrap"
+                    disabled={!!locationErrors[index] || !localData.locations[index]?.name.trim()}
+                  >
+                    Confirmar
+                  </button>
+                )}
+              </div>
+              {locationErrors[index] && (
+                <p className="text-sm text-red-600">
+                  {locationErrors[index]}
+                </p>
               )}
             </div>
           </div>
         ))}
 
-        {/* Sección de grupos (solo si hay más de una ubicación y no es el mismo menú para todos) */}
         {localData.locationCount > 1 && !localData.sameMenuForAll && (
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">Grupos de Ubicaciones</h3>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <h3 className="text-lg font-medium text-gray-900">Grupos de Ubicaciones</h3>
+              <p className="text-sm text-gray-600">
+                Aquí puedes agrupar las ubicaciones que comparten el mismo menú. Esto te permitirá configurar los menús de forma más eficiente, 
+                ya que todas las ubicaciones dentro de un mismo grupo compartirán la misma configuración de menú.
+              </p>
+            </div>
             <button
               onClick={() => {
                 const newGroups = [
@@ -419,14 +421,14 @@ const LegalData = () => {
                 setLocalData(prev => ({ ...prev, groups: newGroups }))
                 updateField('groups', newGroups)
               }}
-              className="btn-secondary"
+              className="btn-secondary mb-4"
             >
               Agregar Grupo
             </button>
 
             {localData.groups.map((group, index) => (
-              <div key={group.id} className="card space-y-4">
-                <div className="flex justify-between items-center">
+              <div key={group.id} className="card">
+                <div className="flex justify-between items-center mb-4">
                   <div className="text-lg font-medium text-gray-900">{generateGroupName(index)}</div>
                   {localData.groups.length > 2 && (
                     <button
@@ -441,10 +443,12 @@ const LegalData = () => {
                     </button>
                   )}
                 </div>
-                <div>
+                <div className="space-y-3">
                   <label className="form-label">Ubicaciones en este grupo</label>
-                  {localData.locations.map((location) => (
-                    <div key={location.name} className="flex items-center space-x-2">
+                  {localData.locations
+                    .filter(location => location.name.trim() !== '') // Solo mostramos ubicaciones con nombre
+                    .map((location) => (
+                    <div key={location.name} className="flex items-center space-x-3">
                       <input
                         type="checkbox"
                         checked={group.locations.includes(location.name)}
@@ -454,11 +458,16 @@ const LegalData = () => {
                             : group.locations.filter(loc => loc !== location.name)
                           handleGroupChange(index, 'locations', newLocations)
                         }}
-                        className="h-4 w-4 rounded border-gray-300 text-brand-purple focus:ring-brand-orange checked:bg-gradient-brand-reverse"
+                        className="checkbox-brand"
                       />
                       <span>{location.name}</span>
                     </div>
                   ))}
+                  {localData.locations.filter(location => location.name.trim() !== '').length === 0 && (
+                    <p className="text-sm text-gray-500 italic">
+                      No hay ubicaciones confirmadas disponibles
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
@@ -472,19 +481,12 @@ const LegalData = () => {
           className="btn-primary"
           disabled={
             !localData.legalBusinessName || 
-            !localData.taxId || 
             (!localData.sameMenuForAll && localData.groups.length < 2)
           }
         >
           Siguiente
         </button>
       </div>
-
-      {!localData.sameMenuForAll && localData.groups.length < 2 && (
-        <p className="text-red-600 text-sm mt-2">
-          Debes tener al menos dos grupos cuando no uses el mismo menú para todas las ubicaciones.
-        </p>
-      )}
     </div>
   )
 }
