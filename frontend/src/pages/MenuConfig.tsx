@@ -5,6 +5,7 @@ import { useTranslation } from '../hooks/useTranslation'
 import { Formik, Form, Field, FormikProps } from 'formik'
 import * as Yup from 'yup'
 import { DocumentIcon, TrashIcon } from '@heroicons/react/24/outline'
+import FormActions from '../components/FormActions'
 
 interface MenuGroup {
   name: string
@@ -140,7 +141,7 @@ export default function MenuConfig() {
         onSubmit={handleSubmit}
       >
         {(formikProps: FormikProps<FormValues>) => {
-          const { values, errors, touched, setFieldValue } = formikProps
+          const { values, errors, touched, setFieldValue, isValid } = formikProps
           return (
             <Form className="space-y-8">
               {values.menuGroups.map((group, groupIndex) => (
@@ -462,14 +463,11 @@ export default function MenuConfig() {
                 </div>
               ))}
 
-              <div className="flex justify-end space-x-4">
-                <button type="button" onClick={() => navigate(-1)} className="btn-secondary">
-                  {t('back')}
-                </button>
-                <button type="submit" className="btn-primary">
-                  {t('continue')}
-                </button>
-              </div>
+              <FormActions
+                onSubmit={formikProps.submitForm}
+                nextPath="/onboarding/observations"
+                isValid={isValid}
+              />
             </Form>
           )
         }}

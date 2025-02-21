@@ -2,8 +2,9 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormProgress, FormData } from '../hooks/useFormProgress'
 import { useTranslation } from '../hooks/useTranslation'
-import { Formik, Form, Field } from 'formik'
+import { Formik, Form, Field, FormikProps } from 'formik'
 import * as Yup from 'yup'
+import FormActions from '../components/FormActions'
 
 interface FormValues {
   additionalNotes: string
@@ -44,7 +45,7 @@ export default function Observations() {
         validationSchema={validationSchema}
         onSubmit={handleSubmit}
       >
-        {({ errors, touched, setFieldValue, values }) => (
+        {(formikProps: FormikProps<FormValues>) => (
           <Form className="space-y-8">
             <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
               <div>
@@ -59,13 +60,13 @@ export default function Observations() {
                   className="input-field mt-2"
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                     const value = e.target.value
-                    setFieldValue('additionalNotes', value)
+                    formikProps.setFieldValue('additionalNotes', value)
                     handleFieldChange('additionalNotes', value)
                   }}
-                  value={values.additionalNotes}
+                  value={formikProps.values.additionalNotes}
                 />
-                {errors.additionalNotes && touched.additionalNotes && (
-                  <div className="error-message">{errors.additionalNotes}</div>
+                {formikProps.errors.additionalNotes && formikProps.touched.additionalNotes && (
+                  <div className="error-message">{formikProps.errors.additionalNotes}</div>
                 )}
               </div>
 
@@ -77,27 +78,24 @@ export default function Observations() {
                     className="form-checkbox"
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const value = e.target.checked
-                      setFieldValue('termsAccepted', value)
+                      formikProps.setFieldValue('termsAccepted', value)
                       handleFieldChange('termsAccepted', value)
                     }}
-                    checked={values.termsAccepted}
+                    checked={formikProps.values.termsAccepted}
                   />
                   <span className="ml-2">{t('termsAndConditions')}</span>
                 </label>
-                {errors.termsAccepted && touched.termsAccepted && (
-                  <div className="error-message">{errors.termsAccepted}</div>
+                {formikProps.errors.termsAccepted && formikProps.touched.termsAccepted && (
+                  <div className="error-message">{formikProps.errors.termsAccepted}</div>
                 )}
               </div>
             </div>
 
-            <div className="flex justify-end space-x-4">
-              <button type="button" onClick={() => navigate(-1)} className="btn-secondary">
-                {t('back')}
-              </button>
-              <button type="submit" className="btn-primary">
-                {t('continue')}
-              </button>
-            </div>
+            <FormActions
+              onSubmit={formikProps.submitForm}
+              nextPath="/onboarding/review"
+              isValid={formikProps.isValid}
+            />
           </Form>
         )}
       </Formik>
