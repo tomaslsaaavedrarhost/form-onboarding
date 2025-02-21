@@ -67,7 +67,11 @@ const googleProvider = new GoogleAuthProvider()
 googleProvider.setCustomParameters({
   prompt: 'select_account',
   login_hint: '',  // Permite que el usuario elija la cuenta
-  access_type: 'offline'  // Necesario para obtener refresh token
+  access_type: 'offline',  // Necesario para obtener refresh token
+  // Usar el dominio de Vercel en producción
+  auth_domain: process.env.NODE_ENV === 'production' 
+    ? 'forms-onboarding.vercel.app'
+    : firebaseConfig.authDomain
 })
 
 // Add scopes if needed
@@ -78,8 +82,10 @@ googleProvider.addScope('email')
 console.log('Google Provider Configuration:', {
   providerId: googleProvider.providerId,
   currentDomain: window.location.origin,
-  authDomain: firebaseConfig.authDomain,
-  allowedDomains: [window.location.origin, firebaseConfig.authDomain]
+  authDomain: process.env.NODE_ENV === 'production' 
+    ? 'forms-onboarding.vercel.app'
+    : firebaseConfig.authDomain,
+  environment: process.env.NODE_ENV
 })
 
 // Initialize Firestore
