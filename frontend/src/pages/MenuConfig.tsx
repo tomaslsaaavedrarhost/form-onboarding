@@ -167,12 +167,13 @@ export default function MenuConfig() {
                         handleFieldChange(groupIndex, 'name', value)
                       }}
                     />
-                    {errors.menuGroups?.[groupIndex]?.name &&
-                      touched.menuGroups?.[groupIndex]?.name && (
-                        <div className="error-message">
-                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).name}
-                        </div>
-                      )}
+                    {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                     'name' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                     touched.menuGroups?.[groupIndex]?.name && (
+                      <div className="error-message">
+                        {(errors.menuGroups[groupIndex] as MenuGroupErrors).name}
+                      </div>
+                     )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -193,12 +194,13 @@ export default function MenuConfig() {
                           )
                         }
                       />
-                      {errors.menuGroups?.[groupIndex]?.regularMenu &&
-                        touched.menuGroups?.[groupIndex]?.regularMenu && (
-                          <div className="error-message">
-                            {(errors.menuGroups[groupIndex] as MenuGroupErrors).regularMenu}
-                          </div>
-                        )}
+                      {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                       'regularMenu' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                       touched.menuGroups?.[groupIndex]?.regularMenu && (
+                        <div className="error-message">
+                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).regularMenu}
+                        </div>
+                       )}
                     </div>
 
                     <div>
@@ -279,12 +281,13 @@ export default function MenuConfig() {
                           handleFieldChange(groupIndex, 'sharedDishes', value)
                         }}
                       />
-                      {errors.menuGroups?.[groupIndex]?.sharedDishes &&
-                        touched.menuGroups?.[groupIndex]?.sharedDishes && (
-                          <div className="error-message">
-                            {(errors.menuGroups[groupIndex] as MenuGroupErrors).sharedDishes}
-                          </div>
-                        )}
+                      {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                       'sharedDishes' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                       touched.menuGroups?.[groupIndex]?.sharedDishes && (
+                        <div className="error-message">
+                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).sharedDishes}
+                        </div>
+                       )}
                     </div>
 
                     <div>
@@ -303,12 +306,13 @@ export default function MenuConfig() {
                           handleFieldChange(groupIndex, 'sharedDrinks', value)
                         }}
                       />
-                      {errors.menuGroups?.[groupIndex]?.sharedDrinks &&
-                        touched.menuGroups?.[groupIndex]?.sharedDrinks && (
-                          <div className="error-message">
-                            {(errors.menuGroups[groupIndex] as MenuGroupErrors).sharedDrinks}
-                          </div>
-                        )}
+                      {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                       'sharedDrinks' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                       touched.menuGroups?.[groupIndex]?.sharedDrinks && (
+                        <div className="error-message">
+                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).sharedDrinks}
+                        </div>
+                       )}
                     </div>
                   </div>
 
@@ -332,12 +336,13 @@ export default function MenuConfig() {
                           handleFieldChange(groupIndex, 'popularAppetizers', value)
                         }}
                       />
-                      {errors.menuGroups?.[groupIndex]?.popularAppetizers &&
-                        touched.menuGroups?.[groupIndex]?.popularAppetizers && (
-                          <div className="error-message">
-                            {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularAppetizers}
-                          </div>
-                        )}
+                      {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                       'popularAppetizers' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                       touched.menuGroups?.[groupIndex]?.popularAppetizers && (
+                        <div className="error-message">
+                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularAppetizers}
+                        </div>
+                       )}
                     </div>
 
                     <div>
@@ -359,12 +364,13 @@ export default function MenuConfig() {
                           handleFieldChange(groupIndex, 'popularMainCourses', value)
                         }}
                       />
-                      {errors.menuGroups?.[groupIndex]?.popularMainCourses &&
-                        touched.menuGroups?.[groupIndex]?.popularMainCourses && (
-                          <div className="error-message">
-                            {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularMainCourses}
-                          </div>
-                        )}
+                      {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                       'popularMainCourses' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                       touched.menuGroups?.[groupIndex]?.popularMainCourses && (
+                        <div className="error-message">
+                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularMainCourses}
+                        </div>
+                       )}
                     </div>
                   </div>
 
@@ -387,12 +393,13 @@ export default function MenuConfig() {
                         handleFieldChange(groupIndex, 'popularDesserts', value)
                       }}
                     />
-                    {errors.menuGroups?.[groupIndex]?.popularDesserts &&
-                      touched.menuGroups?.[groupIndex]?.popularDesserts && (
-                        <div className="error-message">
-                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularDesserts}
-                        </div>
-                      )}
+                    {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                     'popularDesserts' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                     touched.menuGroups?.[groupIndex]?.popularDesserts && (
+                      <div className="error-message">
+                        {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularDesserts}
+                      </div>
+                     )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -415,12 +422,13 @@ export default function MenuConfig() {
                           handleFieldChange(groupIndex, 'popularAlcoholicDrinks', value)
                         }}
                       />
-                      {errors.menuGroups?.[groupIndex]?.popularAlcoholicDrinks &&
-                        touched.menuGroups?.[groupIndex]?.popularAlcoholicDrinks && (
-                          <div className="error-message">
-                            {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularAlcoholicDrinks}
-                          </div>
-                        )}
+                      {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                       'popularAlcoholicDrinks' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                       touched.menuGroups?.[groupIndex]?.popularAlcoholicDrinks && (
+                        <div className="error-message">
+                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularAlcoholicDrinks}
+                        </div>
+                       )}
                     </div>
 
                     <div>
@@ -442,15 +450,13 @@ export default function MenuConfig() {
                           handleFieldChange(groupIndex, 'popularNonAlcoholicDrinks', value)
                         }}
                       />
-                      {errors.menuGroups?.[groupIndex]?.popularNonAlcoholicDrinks &&
-                        touched.menuGroups?.[groupIndex]?.popularNonAlcoholicDrinks && (
-                          <div className="error-message">
-                            {
-                              (errors.menuGroups[groupIndex] as MenuGroupErrors)
-                                .popularNonAlcoholicDrinks
-                            }
-                          </div>
-                        )}
+                      {errors.menuGroups?.[groupIndex] && typeof errors.menuGroups[groupIndex] === 'object' && 
+                       'popularNonAlcoholicDrinks' in (errors.menuGroups[groupIndex] as MenuGroupErrors) && 
+                       touched.menuGroups?.[groupIndex]?.popularNonAlcoholicDrinks && (
+                        <div className="error-message">
+                          {(errors.menuGroups[groupIndex] as MenuGroupErrors).popularNonAlcoholicDrinks}
+                        </div>
+                       )}
                     </div>
                   </div>
                 </div>
