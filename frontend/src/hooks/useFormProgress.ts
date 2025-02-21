@@ -148,6 +148,7 @@ export const useFormProgress = () => {
         createdAt: new Date()
       };
 
+      // First update Firestore
       await addDoc(collection(db, 'shareInvitations'), invitation);
 
       // Update form data with shared user
@@ -159,17 +160,26 @@ export const useFormProgress = () => {
       await setDoc(doc(db, 'formProgress', user.uid), updatedData, { merge: true });
       setFormData(updatedData);
 
-      // Send email notification (you'll need to implement this in your backend)
-      await fetch(`${config.apiUrl}/api/send-share-invitation`, {
+      // Send email notification
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/send-share-invitation`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Origin': window.location.origin
+        },
+        credentials: 'include',
         body: JSON.stringify({
           recipientEmail,
           ownerEmail: user.email,
           formId: user.uid
         })
       });
+
+      if (!response.ok) {
+        throw new Error('Error al enviar la invitación por email');
+      }
     } catch (err) {
+      console.error('Error sharing form:', err);
       setError('Error al compartir el formulario');
       throw err;
     }
