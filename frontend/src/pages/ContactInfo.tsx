@@ -1,25 +1,9 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from '../hooks/useTranslation'
+import { useFormProgress } from '../hooks/useFormProgress'
 import { Formik, Form, Field } from 'formik'
 import * as Yup from 'yup'
-import { useForm } from '../context/FormContext'
-import { useTranslation } from '../hooks/useTranslation'
-
-const validationSchema = Yup.object().shape({
-  contactName: Yup.string().required('Contact name is required'),
-  phone: Yup.string()
-    .required('Phone number is required')
-    .matches(/^[0-9-+()]*$/, 'Invalid phone number'),
-  email: Yup.string()
-    .email('Invalid email address')
-    .required('Email is required'),
-  address: Yup.string().required('Address is required'),
-  city: Yup.string().required('City is required'),
-  state: Yup.string().required('State is required'),
-  zipCode: Yup.string()
-    .required('ZIP code is required')
-    .matches(/^[0-9]{5}(-[0-9]{4})?$/, 'Invalid ZIP code'),
-})
 
 interface FormValues {
   contactName: string
@@ -32,60 +16,58 @@ interface FormValues {
   sameForAllLocations: boolean
 }
 
+const validationSchema = Yup.object().shape({
+  contactName: Yup.string().required('Required'),
+  phone: Yup.string().required('Required'),
+  email: Yup.string().email('Invalid email').required('Required'),
+  address: Yup.string().required('Required'),
+  city: Yup.string().required('Required'),
+  state: Yup.string().required('Required'),
+  zipCode: Yup.string().required('Required'),
+})
+
 export default function ContactInfo() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { state, dispatch } = useForm()
+  const { formData, updateField } = useFormProgress()
 
   const initialValues: FormValues = {
-    contactName: state.contactInfo?.contactName || '',
-    phone: state.contactInfo?.phone || '',
-    email: state.contactInfo?.email || '',
-    address: state.contactInfo?.address || '',
-    city: state.contactInfo?.city || '',
-    state: state.contactInfo?.state || '',
-    zipCode: state.contactInfo?.zipCode || '',
-    sameForAllLocations: state.contactInfo?.sameForAllLocations || false,
+    contactName: formData.contactName || '',
+    phone: formData.phone || '',
+    email: formData.email || '',
+    address: formData.address || '',
+    city: formData.city || '',
+    state: formData.state || '',
+    zipCode: formData.zipCode || '',
+    sameForAllLocations: formData.sameForAllLocations ?? false,
   }
 
   const handleFieldChange = (field: string, value: any) => {
-    dispatch({
-      type: 'SET_CONTACT_INFO',
-      payload: {
-        ...state.contactInfo,
-        [field]: value
-      }
-    })
+    updateField(field, value)
   }
 
   const handleSubmit = (values: FormValues) => {
-    dispatch({
-      type: 'SET_CONTACT_INFO',
-      payload: values
+    Object.entries(values).forEach(([field, value]) => {
+      updateField(field, value)
     })
     navigate('/onboarding/location-details')
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900">{t('contactInfoTitle')}</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          {t('contactInfoSubtitle')}
-        </p>
-      </div>
-
+    <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <h2 className="text-2xl font-bold text-gray-900 mb-8">{t('contactInformation')}</h2>
       <Formik
         initialValues={initialValues}
         validationSchema={validationSchema}
         onSubmit={handleSubmit}
       >
         {({ errors, touched, setFieldValue, values }) => (
-          <Form className="space-y-6">
+          <Form className="space-y-8">
             {/* Contact Information Section */}
             <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-              <h3 className="text-lg font-medium text-gray-900">{t('basicContactInfo')}</h3>
-              
+              <h3 className="text-lg font-medium text-gray-900">{t('primaryContact')}</h3>
+              <p className="text-sm text-gray-600">{t('primaryContactDescription')}</p>
+
               <div>
                 <label htmlFor="contactName" className="form-label">
                   {t('contactName')}
@@ -245,18 +227,35 @@ export default function ContactInfo() {
                   )}
                 </div>
               </div>
+
+              <div className="mt-4">
+                <label className="inline-flex items-center">
+                  <Field
+                    type="checkbox"
+                    name="sameForAllLocations"
+                    className="form-checkbox"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const value = e.target.checked;
+                      setFieldValue('sameForAllLocations', value);
+                      handleFieldChange('sameForAllLocations', value);
+                    }}
+                    checked={values.sameForAllLocations}
+                  />
+                  <span className="ml-2">{t('sameForAllLocations')}</span>
+                </label>
+              </div>
             </div>
 
-            <div className="flex justify-between">
+            <div className="flex justify-end space-x-4">
               <button
                 type="button"
-                onClick={() => navigate('/onboarding/legal-data')}
+                onClick={() => navigate(-1)}
                 className="btn-secondary"
               >
-                Back
+                {t('back')}
               </button>
               <button type="submit" className="btn-primary">
-                Continue
+                {t('continue')}
               </button>
             </div>
           </Form>

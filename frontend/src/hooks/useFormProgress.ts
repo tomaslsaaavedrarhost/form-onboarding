@@ -34,6 +34,7 @@ export interface FormData {
   email?: string;
   phone?: string;
   contactName?: string;
+  sameForAllLocations?: boolean;
 
   // Location Details
   address?: string;
@@ -61,6 +62,20 @@ export interface FormData {
     category: string;
     imageUrl?: string;
   }[];
+  menuGroups?: {
+    name: string;
+    regularMenu: File | null;
+    dietaryMenu: File | null;
+    veganMenu: File | null;
+    otherMenus: File[];
+    sharedDishes: string;
+    sharedDrinks: string;
+    popularAppetizers: string;
+    popularMainCourses: string;
+    popularDesserts: string;
+    popularAlcoholicDrinks: string;
+    popularNonAlcoholicDrinks: string;
+  }[];
 
   // Tips Policy
   tipsEnabled?: boolean;
@@ -70,6 +85,7 @@ export interface FormData {
   // Observations
   additionalNotes?: string;
   specialRequirements?: string[];
+  termsAccepted?: boolean;
 
   // Metadata
   lastUpdated?: Date;
@@ -83,6 +99,9 @@ export interface FormData {
 
   // New field for shared form
   isShared?: boolean;
+
+  // New fields for the new logic
+  ownerEmail?: string;
 }
 
 interface ShareInvitation {
@@ -99,6 +118,8 @@ export const useFormProgress = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sharedForms, setSharedForms] = useState<FormData[]>([]);
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
 
   // Load user's forms (both owned and shared)
   useEffect(() => {
@@ -115,23 +136,22 @@ export const useFormProgress = () => {
         const sharedFormsData = sharedFormsSnap.docs.map(doc => ({
           ...doc.data(),
           formId: doc.id,
-          isShared: true
+          isShared: true,
+          ownerEmail: doc.data().ownerEmail || 'Unknown'
         })) as FormData[];
         
-        if (sharedFormsData.length > 0) {
-          // Si hay formularios compartidos, usar el primero
-          setFormData(sharedFormsData[0]);
-          setSharedForms(sharedFormsData);
-          console.log('Loaded shared form:', sharedFormsData[0]);
-        } else {
-          // Si no hay formularios compartidos, cargar el propio
-          const docRef = doc(db, 'formProgress', user.uid);
-          const docSnap = await getDoc(docRef);
+        setSharedForms(sharedFormsData);
 
-          if (docSnap.exists()) {
-            const ownedForm = docSnap.data() as FormData;
+        // Load own form
+        const docRef = doc(db, 'formProgress', user.uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const ownedForm = docSnap.data() as FormData;
+          // Si no hay un formulario seleccionado, usar el propio
+          if (!selectedFormId) {
             setFormData({ ...ownedForm, ownerId: user.uid });
-            console.log('Loaded owned form:', ownedForm);
+            setSelectedFormId(user.uid);
           }
         }
 
@@ -144,7 +164,69 @@ export const useFormProgress = () => {
     };
 
     loadFormData();
-  }, [user]);
+  }, [user, selectedFormId]);
+
+  // Switch to a different form
+  const switchForm = async (formId: string) => {
+    if (unsavedChanges) {
+      if (!window.confirm('Hay cambios sin guardar. ¿Deseas continuar sin guardar?')) {
+        return;
+      }
+    }
+
+    try {
+      const docRef = doc(db, 'formProgress', formId);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const formData = docSnap.data() as FormData;
+        setFormData({
+          ...formData,
+          formId,
+          isShared: formId !== user?.uid
+        });
+        setSelectedFormId(formId);
+        setUnsavedChanges(false);
+      }
+    } catch (err) {
+      console.error('Error switching form:', err);
+      setError('Error al cambiar de formulario');
+    }
+  };
+
+  // Update form data without saving
+  const updateFormData = (newData: Partial<FormData>) => {
+    setFormData(current => ({
+      ...current,
+      ...newData
+    }));
+    setUnsavedChanges(true);
+  };
+
+  // Save form data
+  const saveFormData = async () => {
+    if (!user) return;
+
+    try {
+      const docId = formData.isShared && formData.formId ? formData.formId : user.uid;
+      await setDoc(doc(db, 'formProgress', docId), {
+        ...formData,
+        lastUpdated: new Date()
+      }, { merge: true });
+      
+      setUnsavedChanges(false);
+      return true;
+    } catch (err) {
+      console.error('Error saving form data:', err);
+      setError('Error al guardar los datos del formulario');
+      return false;
+    }
+  };
+
+  // Update a single field
+  const updateField = (fieldName: keyof FormData, value: any) => {
+    updateFormData({ [fieldName]: value });
+  };
 
   // Share form with another user
   const shareForm = async (recipientEmail: string): Promise<void> => {
@@ -241,49 +323,6 @@ export const useFormProgress = () => {
     }
   };
 
-  // Save form data with real-time updates
-  const saveFormData = async (newData: Partial<FormData>) => {
-    if (!user) return;
-
-    try {
-      const updatedData = {
-        ...formData,
-        ...newData,
-        lastUpdated: new Date(),
-      };
-
-      // Determine which document to update
-      const docId = formData.isShared && formData.formId ? formData.formId : user.uid;
-      await setDoc(doc(db, 'formProgress', docId), updatedData, { merge: true });
-      setFormData(updatedData);
-
-      // If this is a shared form, notify other users
-      if (formData.sharedWith?.length) {
-        try {
-          await fetch(`${import.meta.env.VITE_API_URL}/api/notify-form-update`, {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Origin': window.location.origin
-            },
-            mode: 'cors',
-            credentials: 'include',
-            body: JSON.stringify({
-              formId: docId,
-              updatedBy: user.email,
-              sharedWith: formData.sharedWith
-            })
-          });
-        } catch (notifyError) {
-          console.error('Error notifying form update:', notifyError);
-        }
-      }
-    } catch (err) {
-      console.error('Error saving form data:', err);
-      setError('Error al guardar los datos del formulario');
-    }
-  };
-
   // Subir archivo
   const uploadFile = async (file: File, path: string): Promise<string> => {
     if (!user) throw new Error('Usuario no autenticado');
@@ -293,32 +332,19 @@ export const useFormProgress = () => {
     return await getDownloadURL(fileRef);
   };
 
-  // Guardar campo individual
-  const saveField = async (fieldName: keyof FormData, value: any, file?: File) => {
-    try {
-      let fieldValue = value;
-
-      // Si hay un archivo, súbelo primero
-      if (file) {
-        const fileUrl = await uploadFile(file, fieldName);
-        fieldValue = fileUrl;
-      }
-
-      await saveFormData({ [fieldName]: fieldValue });
-    } catch (err) {
-      setError(`Error al guardar el campo ${fieldName}`);
-    }
-  };
-
   return {
     formData,
     sharedForms,
     loading,
     error,
-    saveField,
+    unsavedChanges,
+    selectedFormId,
+    updateField,
+    updateFormData,
     saveFormData,
-    uploadFile,
+    switchForm,
     shareForm,
-    removeSharing
+    removeSharing,
+    uploadFile
   };
 }; 

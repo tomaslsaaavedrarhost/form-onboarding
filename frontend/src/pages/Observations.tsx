@@ -1,137 +1,101 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useFormProgress } from '../hooks/useFormProgress'
+import { useTranslation } from '../hooks/useTranslation'
 import { Formik, Form, Field } from 'formik'
 import * as Yup from 'yup'
-import { useForm } from '../context/FormContext'
-
-const validationSchema = Yup.object().shape({
-  additionalNotes: Yup.string(),
-  termsAccepted: Yup.boolean()
-    .oneOf([true], 'You must accept the terms and conditions')
-    .required('You must accept the terms and conditions'),
-})
 
 interface FormValues {
   additionalNotes: string
   termsAccepted: boolean
 }
 
+const validationSchema = Yup.object().shape({
+  additionalNotes: Yup.string(),
+  termsAccepted: Yup.boolean().oneOf([true], 'You must accept the terms and conditions'),
+})
+
 export default function Observations() {
   const navigate = useNavigate()
-  const { state, dispatch } = useForm()
+  const { t } = useTranslation()
+  const { formData, updateField } = useFormProgress()
 
   const initialValues: FormValues = {
-    additionalNotes: state.additionalNotes || '',
-    termsAccepted: state.termsAccepted || false,
+    additionalNotes: formData.additionalNotes || '',
+    termsAccepted: formData.termsAccepted || false,
   }
 
-  // Add real-time saving
   const handleFieldChange = (field: string, value: any) => {
-    if (field === 'additionalNotes') {
-      dispatch({
-        type: 'SET_ADDITIONAL_NOTES',
-        payload: value
-      })
-    } else if (field === 'termsAccepted') {
-      dispatch({
-        type: 'SET_TERMS_ACCEPTED',
-        payload: value
-      })
-    }
+    updateField(field, value)
   }
 
   const handleSubmit = (values: FormValues) => {
-    dispatch({
-      type: 'SET_ADDITIONAL_NOTES',
-      payload: values.additionalNotes
-    })
-    dispatch({
-      type: 'SET_TERMS_ACCEPTED',
-      payload: values.termsAccepted
+    Object.entries(values).forEach(([field, value]) => {
+      updateField(field, value)
     })
     navigate('/onboarding/review')
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Additional Notes</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Add any additional information or special requirements for your restaurant.
-        </p>
-      </div>
-
+    <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <h2 className="text-2xl font-bold text-gray-900 mb-8">{t('additionalObservations')}</h2>
       <Formik
         initialValues={initialValues}
         validationSchema={validationSchema}
         onSubmit={handleSubmit}
       >
-        {({ errors, touched }) => (
-          <Form className="space-y-6">
-            <div>
-              <label htmlFor="additionalNotes" className="form-label">
-                Additional Notes
-              </label>
-              <Field
-                as="textarea"
-                name="additionalNotes"
-                id="additionalNotes"
-                rows={6}
-                className="input-field mt-2"
-                placeholder="Enter any additional information that might be relevant for the AI assistant configuration..."
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                  handleFieldChange('additionalNotes', e.target.value)
-                }}
-              />
-              {errors.additionalNotes && touched.additionalNotes && (
-                <div className="error-message">{errors.additionalNotes}</div>
-              )}
-            </div>
+        {({ errors, touched, setFieldValue, values }) => (
+          <Form className="space-y-8">
+            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+              <div>
+                <label htmlFor="additionalNotes" className="form-label">
+                  {t('additionalNotes')}
+                </label>
+                <Field
+                  as="textarea"
+                  name="additionalNotes"
+                  id="additionalNotes"
+                  rows={4}
+                  className="input-field mt-2"
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                    const value = e.target.value
+                    setFieldValue('additionalNotes', value)
+                    handleFieldChange('additionalNotes', value)
+                  }}
+                  value={values.additionalNotes}
+                />
+                {errors.additionalNotes && touched.additionalNotes && (
+                  <div className="error-message">{errors.additionalNotes}</div>
+                )}
+              </div>
 
-            <div className="rounded-md bg-gray-50 p-4">
-              <div className="flex items-start">
-                <div className="flex h-6 items-center">
+              <div>
+                <label className="inline-flex items-center">
                   <Field
                     type="checkbox"
                     name="termsAccepted"
-                    id="termsAccepted"
-                    className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-600"
+                    className="form-checkbox"
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      handleFieldChange('termsAccepted', e.target.checked)
+                      const value = e.target.checked
+                      setFieldValue('termsAccepted', value)
+                      handleFieldChange('termsAccepted', value)
                     }}
+                    checked={values.termsAccepted}
                   />
-                </div>
-                <div className="ml-3">
-                  <label htmlFor="termsAccepted" className="text-sm text-gray-700">
-                    I accept the{' '}
-                    <a
-                      href="#"
-                      className="font-medium text-primary-600 hover:text-primary-500"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        // Here you would typically open the terms and conditions modal/page
-                      }}
-                    >
-                      terms and conditions
-                    </a>
-                  </label>
-                  {errors.termsAccepted && touched.termsAccepted && (
-                    <p className="error-message">{errors.termsAccepted}</p>
-                  )}
-                </div>
+                  <span className="ml-2">{t('termsAndConditions')}</span>
+                </label>
+                {errors.termsAccepted && touched.termsAccepted && (
+                  <div className="error-message">{errors.termsAccepted}</div>
+                )}
               </div>
             </div>
 
-            <div className="flex justify-between">
-              <button
-                type="button"
-                onClick={() => navigate('/onboarding/tips-policy')}
-                className="btn-secondary"
-              >
-                Back
+            <div className="flex justify-end space-x-4">
+              <button type="button" onClick={() => navigate(-1)} className="btn-secondary">
+                {t('back')}
               </button>
               <button type="submit" className="btn-primary">
-                Continue
+                {t('continue')}
               </button>
             </div>
           </Form>
