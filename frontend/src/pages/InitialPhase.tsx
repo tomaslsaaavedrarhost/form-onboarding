@@ -156,9 +156,11 @@ export default function InitialPhase() {
                             setFieldValue(`locations.${index}.nameConfirmed`, false)
                           }}
                         />
-                        {errors.locations?.[index]?.name && touched.locations?.[index]?.name && (
+                        {errors.locations?.[index] && touched.locations?.[index]?.name && (
                           <div className="error-message">
-                            {errors.locations[index].name}
+                            {typeof errors.locations[index] === 'string' 
+                              ? errors.locations[index] 
+                              : (errors.locations[index] as LocationErrors)?.name}
                           </div>
                         )}
                       </div>
@@ -181,10 +183,11 @@ export default function InitialPhase() {
                               >
                                 I confirm that "{location.name}" is the exact name of this location
                               </label>
-                              {errors.locations?.[index]?.nameConfirmed && 
-                               touched.locations?.[index]?.nameConfirmed && (
+                              {errors.locations?.[index] && touched.locations?.[index]?.nameConfirmed && (
                                 <p className="error-message mt-1">
-                                  {errors.locations[index].nameConfirmed}
+                                  {typeof errors.locations[index] === 'string'
+                                    ? errors.locations[index]
+                                    : (errors.locations[index] as LocationErrors)?.nameConfirmed}
                                 </p>
                               )}
                             </div>
