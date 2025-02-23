@@ -9,6 +9,8 @@ import WeeklySchedule from '../components/WeeklySchedule'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import type { Location } from '../context/FormContext'
 import { useFormikContext } from 'formik'
+import { useFormProgress } from '../hooks/useFormProgress'
+import { FormState } from '../context/FormContext'
 
 // Lista de estados de EE.UU.
 const US_STATES = [
@@ -166,7 +168,7 @@ interface ExtendedLocationDetail extends LocationDetail {
 }
 
 interface FormValues {
-  locationDetails: LocationDetail[]
+  locationDetails: ExtendedLocationDetail[]
 }
 
 const phoneRegExp = /^\+?1?\d{10,14}$/
@@ -226,7 +228,7 @@ export const createEmptySchedule = () => {
   return schedule
 }
 
-export const createEmptyLocation = (): LocationDetail => ({
+export const createEmptyLocation = (): ExtendedLocationDetail => ({
   locationId: '',
   state: '',
   streetAddress: '',
@@ -324,7 +326,9 @@ export const createEmptyLocation = (): LocationDetail => ({
     hasBrunchMenu: false,
     schedule: '',
     menuFile: null
-  }
+  },
+  paymentMethodsNotes: '',
+  showPassword: false
 })
 
 const validationSchema = Yup.object().shape({
@@ -479,50 +483,49 @@ const Notification = ({ message, onClose }: { message: string; onClose: () => vo
 };
 
 export default function LocationDetails() {
-  const { state, dispatch } = useForm();
-  const navigate = useNavigate();
-  const { t } = useTranslation();
-  const [expandedLocations, setExpandedLocations] = useState<string[]>([]);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showSavePrompt, setShowSavePrompt] = useState(false);
-  const [showNotification, setShowNotification] = useState(false);
+  const navigate = useNavigate()
+  const { t } = useTranslation()
+  const { state, dispatch } = useForm()
+  const { saveFormData } = useFormProgress()
+  const [expandedLocations, setExpandedLocations] = useState<string[]>([])
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showSavePrompt, setShowSavePrompt] = useState(false)
+  const [showNotification, setShowNotification] = useState(false)
 
-  // Función para manejar cambios en cualquier campo
+  const toggleLocationExpanded = (id: string) => {
+    setExpandedLocations(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
   const handleFieldChange = (setFieldValue: any, field: string, value: any) => {
-    setHasUnsavedChanges(true);
-    setFieldValue(field, value);
-  };
+    setHasUnsavedChanges(true)
+    setFieldValue(field, value)
+  }
 
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: FormValues) => {
     try {
-      // Asegurarse de que los valores sean válidos antes de guardar
-      const locationDetails = values.locationDetails.map((location: LocationDetail) => ({
+      const locationDetails = values.locationDetails.map(location => ({
         ...location,
-        // Asegurarse de que los arrays estén inicializados
         phoneNumbers: location.phoneNumbers || [],
         acceptedPaymentMethods: location.acceptedPaymentMethods || [],
-        transferRules: location.transferRules || [],
-        // Asegurarse de que los objetos anidados estén inicializados
-        reservationSettings: {
-          ...location.reservationSettings,
-          parking: location.reservationSettings?.parking || { hasParking: false }
-        },
-        pickupSettings: location.pickupSettings || { platforms: [], preferredPlatform: '', preferredPlatformLink: '' },
-        deliverySettings: location.deliverySettings || { platforms: [], preferredPlatform: '', preferredPlatformLink: '' },
-        parking: location.parking || { hasParking: false },
-        corkage: location.corkage || { allowed: false },
-        specialDiscounts: location.specialDiscounts || { hasDiscounts: false, details: [] }
-      }));
-
-      // Actualizar el estado global con los nuevos valores
-      dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails });
-      setHasUnsavedChanges(false);
-      setShowNotification(true);
+        parking: {
+          hasParking: location.parking?.hasParking || false,
+          parkingType: location.parking?.parkingType,
+          pricingDetails: location.parking?.pricingDetails || '',
+          location: location.parking?.location || ''
+        }
+      }))
+      
+      await dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails })
+      await saveFormData()
+      setHasUnsavedChanges(false)
+      setShowNotification(true)
+      setTimeout(() => setShowNotification(false), 3000)
     } catch (error) {
-      console.error('Error al guardar:', error);
-      alert('Hubo un error al guardar los cambios. Por favor intenta nuevamente.');
+      console.error('Error saving location details:', error)
     }
-  };
+  }
 
   const handleNext = (values: FormValues) => {
     if (hasUnsavedChanges) {
@@ -592,7 +595,7 @@ export default function LocationDetails() {
         initialValues={{
           locationDetails: state.locationDetails?.length > 0 
             ? state.locationDetails 
-            : (state.locations || []).map((location): LocationDetail => ({
+            : (state.locations || []).map((location): ExtendedLocationDetail => ({
                 locationId: location.id,
                 selectedLocationName: location.name,
                 state: '',
@@ -663,7 +666,8 @@ export default function LocationDetails() {
                 },
                 brunchMenu: {
                   hasBrunchMenu: false
-                }
+                },
+                showPassword: false
               }))
         }}
         enableReinitialize={false}
@@ -674,17 +678,11 @@ export default function LocationDetails() {
           <Form className="space-y-8">
             <SavePrompt values={values} />
             
-            {values.locationDetails.map((location: LocationDetail, index: number) => (
+            {values.locationDetails.map((location: ExtendedLocationDetail, index: number) => (
               <div key={location.locationId || index} className="bg-white shadow rounded-lg overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (expandedLocations.includes(location.locationId)) {
-                      setExpandedLocations(expandedLocations.filter(id => id !== location.locationId))
-                    } else {
-                      setExpandedLocations([...expandedLocations, location.locationId])
-                    }
-                  }}
+                  onClick={() => toggleLocationExpanded(location.locationId)}
                   className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50"
                 >
                   <div>
