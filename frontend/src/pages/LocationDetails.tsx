@@ -146,6 +146,7 @@ interface ReservationSettings {
   platform: string
   reservationLink: string
   phoneCarrier: string
+  gracePeriod: number
   parking: {
     hasParking: boolean
     parkingType?: 'free' | 'paid'
@@ -161,6 +162,7 @@ interface ExtendedLocationDetail extends LocationDetail {
   defaultTransferToHost: boolean
   transferRules: any[]
   reservationSettings: ReservationSettings
+  showPassword?: boolean
 }
 
 interface FormValues {
@@ -244,6 +246,7 @@ export const createEmptyLocation = (): LocationDetail => ({
     platform: '',
     reservationLink: '',
     phoneCarrier: '',
+    gracePeriod: 15,
     parking: {
       hasParking: false,
       parkingType: undefined,
@@ -367,6 +370,10 @@ const validationSchema = Yup.object().shape({
           is: (val: string) => val && val.length > 0,
           then: () => Yup.string().url('invalidUrl').required('required')
         }),
+        gracePeriod: Yup.number().when('acceptsReservations', {
+          is: true,
+          then: () => Yup.number().min(0, 'Must be at least 0').required('required')
+        }),
         phoneCarrier: Yup.string().required('required'),
         parking: Yup.object().shape({
           hasParking: Yup.boolean().required('required'),
@@ -438,14 +445,142 @@ interface WaitTimes {
   };
 }
 
+// Componente de notificación personalizado
+const Notification = ({ message, onClose }: { message: string; onClose: () => void }) => {
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-4 right-4 z-50 animate-fade-in">
+      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4 flex items-center space-x-3">
+        <div className="flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        </div>
+        <p className="text-gray-800">{message}</p>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function LocationDetails() {
   const { state, dispatch } = useForm();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [expandedLocations, setExpandedLocations] = useState<string[]>([]);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+
+  // Función para manejar cambios en cualquier campo
+  const handleFieldChange = (setFieldValue: any, field: string, value: any) => {
+    setHasUnsavedChanges(true);
+    setFieldValue(field, value);
+  };
+
+  const handleSave = async (values: any) => {
+    try {
+      // Asegurarse de que los valores sean válidos antes de guardar
+      const locationDetails = values.locationDetails.map((location: LocationDetail) => ({
+        ...location,
+        // Asegurarse de que los arrays estén inicializados
+        phoneNumbers: location.phoneNumbers || [],
+        acceptedPaymentMethods: location.acceptedPaymentMethods || [],
+        transferRules: location.transferRules || [],
+        // Asegurarse de que los objetos anidados estén inicializados
+        reservationSettings: {
+          ...location.reservationSettings,
+          parking: location.reservationSettings?.parking || { hasParking: false }
+        },
+        pickupSettings: location.pickupSettings || { platforms: [], preferredPlatform: '', preferredPlatformLink: '' },
+        deliverySettings: location.deliverySettings || { platforms: [], preferredPlatform: '', preferredPlatformLink: '' },
+        parking: location.parking || { hasParking: false },
+        corkage: location.corkage || { allowed: false },
+        specialDiscounts: location.specialDiscounts || { hasDiscounts: false, details: [] }
+      }));
+
+      // Actualizar el estado global con los nuevos valores
+      dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails });
+      setHasUnsavedChanges(false);
+      setShowNotification(true);
+    } catch (error) {
+      console.error('Error al guardar:', error);
+      alert('Hubo un error al guardar los cambios. Por favor intenta nuevamente.');
+    }
+  };
+
+  const handleNext = (values: FormValues) => {
+    if (hasUnsavedChanges) {
+      setShowSavePrompt(true);
+    } else {
+      dispatch({ type: 'SET_LOCATION_DETAILS', payload: values.locationDetails });
+      navigate('/onboarding/ai-config', { replace: true });
+    }
+  };
+
+  // Componente para el modal de confirmación
+  const SavePrompt = ({ values }: { values: any }) => {
+    if (!showSavePrompt) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Cambios sin guardar
+          </h3>
+          <p className="text-gray-600 mb-6">
+            Tienes cambios sin guardar. ¿Qué deseas hacer?
+          </p>
+          <div className="flex justify-end space-x-4">
+            <button
+              onClick={() => {
+                setShowSavePrompt(false);
+                dispatch({ type: 'SET_LOCATION_DETAILS', payload: values.locationDetails });
+                navigate('/onboarding/ai-config', { replace: true });
+              }}
+              className="btn-secondary"
+            >
+              Continuar sin guardar
+            </button>
+            <button
+              onClick={async () => {
+                await handleSave(values);
+                setShowSavePrompt(false);
+                navigate('/onboarding/ai-config', { replace: true });
+              }}
+              className="btn-primary"
+            >
+              Guardar y continuar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-8">
+      {showNotification && (
+        <Notification
+          message="Los cambios han sido guardados correctamente"
+          onClose={() => setShowNotification(false)}
+        />
+      )}
       <div>
         <h2 className="text-2xl font-semibold text-gray-900">{t('locationDetailsTitle')}</h2>
         <p className="mt-2 text-sm text-gray-600">
@@ -455,83 +590,90 @@ export default function LocationDetails() {
 
       <Formik
         initialValues={{
-          locationDetails: (state.locations || []).map((location): LocationDetail => ({
-            locationId: location.id,
-            state: '',
-            streetAddress: '',
-            timeZone: '',
-            managerEmail: '',
-            phoneNumbers: [],
-            acceptedPaymentMethods: [],
-            phoneCarrier: '',
-            schedule: createEmptySchedule(),
-            defaultTransferToHost: false,
-            transferRules: [],
-            reservationSettings: {
-              acceptsReservations: false,
-              platform: '',
-              reservationLink: '',
-              phoneCarrier: '',
-              parking: {
-                hasParking: false
-              },
-              schedule: createEmptySchedule()
-            },
-            pickupSettings: {
-              platforms: [],
-              preferredPlatform: '',
-              preferredPlatformLink: ''
-            },
-            deliverySettings: {
-              platforms: [],
-              preferredPlatform: '',
-              preferredPlatformLink: ''
-            },
-            parking: {
-              hasParking: false
-            },
-            corkage: {
-              allowed: false
-            },
-            specialDiscounts: {
-              hasDiscounts: false
-            },
-            holidayEvents: {
-              hasEvents: false
-            },
-            specialEvents: {
-              hasEvents: false
-            },
-            socialMedia: {
-              instagram: {
-                usesInstagram: false
-              }
-            },
-            birthdayCelebrations: {
-              allowed: false
-            },
-            dressCode: {
-              hasDressCode: false
-            },
-            ageVerification: {
-              acceptedDocuments: []
-            },
-            smokingArea: {
-              hasSmokingArea: false
-            },
-            brunchMenu: {
-              hasBrunchMenu: false
-            }
-          }))
+          locationDetails: state.locationDetails?.length > 0 
+            ? state.locationDetails 
+            : (state.locations || []).map((location): LocationDetail => ({
+                locationId: location.id,
+                selectedLocationName: location.name,
+                state: '',
+                streetAddress: '',
+                timeZone: '',
+                managerEmail: '',
+                phoneNumbers: [],
+                acceptedPaymentMethods: [],
+                phoneCarrier: '',
+                schedule: createEmptySchedule(),
+                defaultTransferToHost: false,
+                transferRules: [],
+                reservationSettings: {
+                  acceptsReservations: false,
+                  platform: '',
+                  reservationLink: '',
+                  phoneCarrier: '',
+                  gracePeriod: 15,
+                  parking: {
+                    hasParking: false
+                  },
+                  schedule: createEmptySchedule()
+                },
+                pickupSettings: {
+                  platforms: [],
+                  preferredPlatform: '',
+                  preferredPlatformLink: ''
+                },
+                deliverySettings: {
+                  platforms: [],
+                  preferredPlatform: '',
+                  preferredPlatformLink: ''
+                },
+                parking: {
+                  hasParking: false
+                },
+                corkage: {
+                  allowed: false
+                },
+                specialDiscounts: {
+                  hasDiscounts: false,
+                  details: []
+                },
+                holidayEvents: {
+                  hasEvents: false,
+                  events: []
+                },
+                specialEvents: {
+                  hasEvents: false,
+                  events: []
+                },
+                socialMedia: {
+                  instagram: {
+                    usesInstagram: false
+                  }
+                },
+                birthdayCelebrations: {
+                  allowed: false
+                },
+                dressCode: {
+                  hasDressCode: false
+                },
+                ageVerification: {
+                  acceptedDocuments: []
+                },
+                smokingArea: {
+                  hasSmokingArea: false
+                },
+                brunchMenu: {
+                  hasBrunchMenu: false
+                }
+              }))
         }}
+        enableReinitialize={false}
         validationSchema={validationSchema}
-        onSubmit={(values) => {
-          dispatch({ type: 'SET_LOCATION_DETAILS', payload: values.locationDetails });
-          navigate('/menu-groups');
-        }}
+        onSubmit={(values) => handleNext(values)}
       >
         {({ values, setFieldValue }) => (
           <Form className="space-y-8">
+            <SavePrompt values={values} />
+            
             {values.locationDetails.map((location: LocationDetail, index: number) => (
               <div key={location.locationId || index} className="bg-white shadow rounded-lg overflow-hidden">
                 <button
@@ -547,7 +689,7 @@ export default function LocationDetails() {
                 >
                   <div>
                     <h3 className="text-lg font-medium text-gray-900">
-                      {location.streetAddress || `Location ${index + 1}`}
+                      {location.selectedLocationName || `Location ${index + 1}`}
                     </h3>
                     {location.streetAddress && (
                       <p className="mt-1 text-sm text-gray-500">
@@ -563,6 +705,49 @@ export default function LocationDetails() {
                 </button>
                 {expandedLocations.includes(location.locationId) && (
                   <div className="px-6 py-4 border-t border-gray-200 space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Selecciona el nombre de la ubicación
+                      </label>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Elige a qué ubicación corresponden estos detalles
+                      </p>
+                      <Field
+                        as="select"
+                        name={`locationDetails.${index}.selectedLocationName`}
+                        className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                          const selectedName = e.target.value;
+                          const isNameTaken = values.locationDetails.some(
+                            (loc, i) => i !== index && loc.selectedLocationName === selectedName
+                          );
+                          if (!isNameTaken) {
+                            handleFieldChange(setFieldValue, `locationDetails.${index}.selectedLocationName`, selectedName);
+                          } else {
+                            alert('Este nombre de ubicación ya ha sido seleccionado para otra ubicación');
+                            e.target.value = values.locationDetails[index].selectedLocationName || '';
+                          }
+                        }}
+                      >
+                        <option value="">Selecciona una ubicación...</option>
+                        {state.locations
+                          .filter(loc => loc.nameConfirmed && loc.name)
+                          .filter(loc => 
+                            !values.locationDetails.some(
+                              (detail, i) => 
+                                i !== index && 
+                                detail.selectedLocationName === loc.name
+                            )
+                          )
+                          .map(loc => (
+                            <option key={loc.name} value={loc.name}>
+                              {loc.name}
+                            </option>
+                          ))
+                        }
+                      </Field>
+                    </div>
+
                     <SectionTitle>Basic Location Information</SectionTitle>
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                       <div>
@@ -575,7 +760,8 @@ export default function LocationDetails() {
                         <Field
                           as="select"
                           name={`locationDetails.${index}.state`}
-                          className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.state`, e.target.value)}
                         >
                           <option value="">Select a state...</option>
                           {US_STATES.map(state => (
@@ -597,7 +783,8 @@ export default function LocationDetails() {
                           type="text"
                           name={`locationDetails.${index}.streetAddress`}
                           placeholder="e.g., 123 Main Street, Suite 100"
-                          className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.streetAddress`, e.target.value)}
                         />
                       </div>
 
@@ -611,7 +798,8 @@ export default function LocationDetails() {
                         <Field
                           as="select"
                           name={`locationDetails.${index}.timeZone`}
-                          className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.timeZone`, e.target.value)}
                         >
                           <option value="">Select time zone...</option>
                           {TIME_ZONES.map(tz => (
@@ -633,7 +821,8 @@ export default function LocationDetails() {
                           type="email"
                           name={`locationDetails.${index}.managerEmail`}
                           placeholder="manager@restaurant.com"
-                          className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.managerEmail`, e.target.value)}
                         />
                       </div>
                     </div>
@@ -652,7 +841,8 @@ export default function LocationDetails() {
                                   type="tel"
                                   name={`locationDetails.${index}.phoneNumbers.${phoneIndex}`}
                                   placeholder="Enter phone number with country code"
-                                  className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  className="flex-1 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.phoneNumbers.${phoneIndex}`, e.target.value)}
                                 />
                                 <button
                                   type="button"
@@ -688,6 +878,19 @@ export default function LocationDetails() {
                                 type="checkbox"
                                 name={`locationDetails.${index}.acceptedPaymentMethods`}
                                 value={method}
+                                checked={values.locationDetails[index].acceptedPaymentMethods.includes(method)}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                  const currentMethods = [...values.locationDetails[index].acceptedPaymentMethods];
+                                  if (e.target.checked) {
+                                    currentMethods.push(method);
+                                  } else {
+                                    const idx = currentMethods.indexOf(method);
+                                    if (idx > -1) {
+                                      currentMethods.splice(idx, 1);
+                                    }
+                                  }
+                                  handleFieldChange(setFieldValue, `locationDetails.${index}.acceptedPaymentMethods`, currentMethods);
+                                }}
                                 className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                               />
                               <label className="ml-2 text-sm text-gray-700">
@@ -701,7 +904,8 @@ export default function LocationDetails() {
                                   type="text"
                                   name={`locationDetails.${index}.${method.toLowerCase().replace('_', '')}Exclusions`}
                                   placeholder={`Specify any ${method.toLowerCase().replace('_', ' ')} exclusions (e.g., 'No American Express')`}
-                                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.${method.toLowerCase().replace('_', '')}Exclusions`, e.target.value)}
                                 />
                               </div>
                             )}
@@ -717,29 +921,26 @@ export default function LocationDetails() {
                       </p>
                       <div className="space-y-4">
                         <div className="flex items-center space-x-4">
-                          <span className="text-sm font-medium text-gray-700">Does your establishment allow corkage?</span>
-                          <div className="flex items-center space-x-4">
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.corkage.allowed`}
-                                checked={values.locationDetails[index].corkage.allowed === true}
-                                onChange={() => setFieldValue(`locationDetails.${index}.corkage.allowed`, true)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Yes</span>
-                            </label>
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.corkage.allowed`}
-                                checked={values.locationDetails[index].corkage.allowed === false}
-                                onChange={() => setFieldValue(`locationDetails.${index}.corkage.allowed`, false)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">No</span>
-                            </label>
-                          </div>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name={`locationDetails.${index}.corkage.allowed`}
+                              checked={values.locationDetails[index].corkage.allowed === true}
+                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.allowed`, true)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">Yes</span>
+                          </label>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name={`locationDetails.${index}.corkage.allowed`}
+                              checked={values.locationDetails[index].corkage.allowed === false}
+                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.allowed`, false)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">No</span>
+                          </label>
                         </div>
 
                         {values.locationDetails[index].corkage.allowed && (
@@ -754,7 +955,8 @@ export default function LocationDetails() {
                               type="text"
                               name={`locationDetails.${index}.corkage.fee`}
                               placeholder="e.g., $25 per bottle"
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.fee`, e.target.value)}
                             />
                           </div>
                         )}
@@ -768,29 +970,26 @@ export default function LocationDetails() {
                       </p>
                       <div className="space-y-4">
                         <div className="flex items-center space-x-4">
-                          <span className="text-sm font-medium text-gray-700">Do you offer any special discounts or Happy Hours?</span>
-                          <div className="flex items-center space-x-4">
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.specialDiscounts.hasDiscounts`}
-                                checked={values.locationDetails[index].specialDiscounts.hasDiscounts === true}
-                                onChange={() => setFieldValue(`locationDetails.${index}.specialDiscounts.hasDiscounts`, true)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Yes</span>
-                            </label>
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.specialDiscounts.hasDiscounts`}
-                                checked={values.locationDetails[index].specialDiscounts.hasDiscounts === false}
-                                onChange={() => setFieldValue(`locationDetails.${index}.specialDiscounts.hasDiscounts`, false)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">No</span>
-                            </label>
-                          </div>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name={`locationDetails.${index}.specialDiscounts.hasDiscounts`}
+                              checked={values.locationDetails[index].specialDiscounts.hasDiscounts === true}
+                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.hasDiscounts`, true)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">Yes</span>
+                          </label>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name={`locationDetails.${index}.specialDiscounts.hasDiscounts`}
+                              checked={values.locationDetails[index].specialDiscounts.hasDiscounts === false}
+                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.hasDiscounts`, false)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">No</span>
+                          </label>
                         </div>
 
                         {values.locationDetails[index].specialDiscounts.hasDiscounts && (
@@ -804,7 +1003,8 @@ export default function LocationDetails() {
                                         type="text"
                                         name={`locationDetails.${index}.specialDiscounts.details.${detailIndex}`}
                                         placeholder="e.g., 10% off for military, Happy Hour 4-6 PM"
-                                        className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                        className="flex-1 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.details.${detailIndex}`, e.target.value)}
                                       />
                                       <button
                                         type="button"
@@ -838,7 +1038,8 @@ export default function LocationDetails() {
                       <Field
                         as="select"
                         name={`locationDetails.${index}.phoneCarrier`}
-                        className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.phoneCarrier`, e.target.value)}
                       >
                         <option value="">{t('selectPhoneCarrier')}</option>
                         {PHONE_CARRIERS.map(carrier => (
@@ -861,7 +1062,8 @@ export default function LocationDetails() {
                         <Field
                           type="text"
                           name={`locationDetails.${index}.otherPhoneCarrier`}
-                          className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.otherPhoneCarrier`, e.target.value)}
                         />
                       </div>
                     )}
@@ -883,19 +1085,34 @@ export default function LocationDetails() {
                               type="text"
                               name={`locationDetails.${index}.carrierCredentials.username`}
                               placeholder="Enter your carrier account username"
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.username`, e.target.value)}
                             />
                           </div>
                           <div>
                             <label htmlFor={`locationDetails.${index}.carrierCredentials.password`} className="block text-sm font-medium text-gray-700">
                               Account Password
                             </label>
-                            <Field
-                              type="password"
-                              name={`locationDetails.${index}.carrierCredentials.password`}
-                              placeholder="Enter your carrier account password"
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            />
+                            <div className="mt-1 relative">
+                              <Field
+                                type={values.locationDetails[index].showPassword ? "text" : "password"}
+                                name={`locationDetails.${index}.carrierCredentials.password`}
+                                placeholder="Enter your carrier account password"
+                                className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.password`, e.target.value)}
+                              />
+                              <div className="mt-2">
+                                <label className="inline-flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={values.locationDetails[index].showPassword || false}
+                                    onChange={(e) => handleFieldChange(setFieldValue, `locationDetails.${index}.showPassword`, e.target.checked)}
+                                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                  />
+                                  <span className="ml-2 text-sm text-gray-600">Show password</span>
+                                </label>
+                              </div>
+                            </div>
                           </div>
                           <div>
                             <label htmlFor={`locationDetails.${index}.carrierCredentials.pin`} className="block text-sm font-medium text-gray-700">
@@ -908,7 +1125,8 @@ export default function LocationDetails() {
                               type="text"
                               name={`locationDetails.${index}.carrierCredentials.pin`}
                               placeholder="Enter your account PIN"
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.pin`, e.target.value)}
                             />
                           </div>
                         </div>
@@ -928,33 +1146,30 @@ export default function LocationDetails() {
                     <div>
                       <SectionTitle>Call Transfer Configuration</SectionTitle>
                       <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Configure how incoming calls should be handled for this location
+                        ¿Querés configuraciones avanzadas para el Human Transfer?
                       </p>
                       <div className="space-y-4">
                         <div className="flex items-center space-x-4">
-                          <span className="text-sm font-medium text-gray-700">Transfer all calls to host (main line)?</span>
-                          <div className="flex items-center space-x-4">
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.defaultTransferToHost`}
-                                checked={values.locationDetails[index].defaultTransferToHost === true}
-                                onChange={() => setFieldValue(`locationDetails.${index}.defaultTransferToHost`, true)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Yes</span>
-                            </label>
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.defaultTransferToHost`}
-                                checked={values.locationDetails[index].defaultTransferToHost === false}
-                                onChange={() => setFieldValue(`locationDetails.${index}.defaultTransferToHost`, false)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">No</span>
-                            </label>
-                          </div>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name={`locationDetails.${index}.defaultTransferToHost`}
+                              checked={values.locationDetails[index].defaultTransferToHost === true}
+                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.defaultTransferToHost`, true)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">Yes</span>
+                          </label>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name={`locationDetails.${index}.defaultTransferToHost`}
+                              checked={values.locationDetails[index].defaultTransferToHost === false}
+                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.defaultTransferToHost`, false)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">No</span>
+                          </label>
                         </div>
 
                         {values.locationDetails[index].defaultTransferToHost === false && (
@@ -973,7 +1188,8 @@ export default function LocationDetails() {
                                         <Field
                                           as="select"
                                           name={`locationDetails.${index}.transferRules.${ruleIndex}.type`}
-                                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                          className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.transferRules.${ruleIndex}.type`, e.target.value)}
                                         >
                                           <option value="">Select type...</option>
                                           {CALL_TYPES.map(type => (
@@ -987,7 +1203,8 @@ export default function LocationDetails() {
                                           type="tel"
                                           name={`locationDetails.${index}.transferRules.${ruleIndex}.number`}
                                           placeholder="Enter phone number for this type of inquiry"
-                                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                          className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.transferRules.${ruleIndex}.number`, e.target.value)}
                                         />
                                       </div>
                                       <button
@@ -1017,33 +1234,30 @@ export default function LocationDetails() {
                     <div>
                       <SectionTitle>Reservation Settings</SectionTitle>
                       <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Configure how reservations are handled for this location
+                        ¿Aceptan reservas en esta locación?
                       </p>
                       <div className="space-y-4">
                         <div className="flex items-center space-x-4">
-                          <span className="text-sm font-medium text-gray-700">Does this location accept reservations?</span>
-                          <div className="flex items-center space-x-4">
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.reservationSettings.acceptsReservations`}
-                                checked={values.locationDetails[index].reservationSettings.acceptsReservations === true}
-                                onChange={() => setFieldValue(`locationDetails.${index}.reservationSettings.acceptsReservations`, true)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">Yes</span>
-                            </label>
-                            <label className="inline-flex items-center">
-                              <input
-                                type="radio"
-                                name={`locationDetails.${index}.reservationSettings.acceptsReservations`}
-                                checked={values.locationDetails[index].reservationSettings.acceptsReservations === false}
-                                onChange={() => setFieldValue(`locationDetails.${index}.reservationSettings.acceptsReservations`, false)}
-                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                              />
-                              <span className="ml-2 text-sm text-gray-700">No</span>
-                            </label>
-                          </div>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name={`locationDetails.${index}.reservationSettings.acceptsReservations`}
+                              checked={values.locationDetails[index].reservationSettings.acceptsReservations === true}
+                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.acceptsReservations`, true)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">Yes</span>
+                          </label>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name={`locationDetails.${index}.reservationSettings.acceptsReservations`}
+                              checked={values.locationDetails[index].reservationSettings.acceptsReservations === false}
+                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.acceptsReservations`, false)}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">No</span>
+                          </label>
                         </div>
 
                         {values.locationDetails[index].reservationSettings.acceptsReservations === true && (
@@ -1055,7 +1269,8 @@ export default function LocationDetails() {
                               <Field
                                 as="select"
                                 name={`locationDetails.${index}.reservationSettings.platform`}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.platform`, e.target.value)}
                               >
                                 <option value="">Select reservation platform...</option>
                                 {RESERVATION_PLATFORMS.map(platform => (
@@ -1065,6 +1280,24 @@ export default function LocationDetails() {
                                 ))}
                               </Field>
                             </div>
+
+                            {values.locationDetails[index].reservationSettings.platform && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                  Link de Reservas
+                                </label>
+                                <p className="mt-1 text-sm text-gray-500">
+                                  Ingresa el link exacto de reservas para esta ubicación. Este link será enviado por el asistente AI a los clientes que soliciten hacer una reserva.
+                                </p>
+                                <Field
+                                  type="url"
+                                  name={`locationDetails.${index}.reservationSettings.reservationLink`}
+                                  placeholder="https://..."
+                                  className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.reservationLink`, e.target.value)}
+                                />
+                              </div>
+                            )}
 
                             <div>
                               <label className="block text-sm font-medium text-gray-700">
@@ -1078,12 +1311,14 @@ export default function LocationDetails() {
                                   type="number"
                                   name={`locationDetails.${index}.reservationSettings.maxAdvanceTime`}
                                   min="1"
-                                  className="block w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  className="block w-32 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.maxAdvanceTime`, e.target.value)}
                                 />
                                 <Field
                                   as="select"
                                   name={`locationDetails.${index}.reservationSettings.maxAdvanceTimeUnit`}
-                                  className="block w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  className="block w-32 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.maxAdvanceTimeUnit`, e.target.value)}
                                 >
                                   <option value="days">Days</option>
                                   <option value="weeks">Weeks</option>
@@ -1101,7 +1336,25 @@ export default function LocationDetails() {
                               <Field
                                 type="number"
                                 name={`locationDetails.${index}.reservationSettings.maxPartySize`}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.maxPartySize`, e.target.value)}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                Grace Period (minutes)
+                              </label>
+                              <p className="mt-1 text-sm text-gray-500">
+                                How many minutes after the reservation time the table will be held before being released
+                              </p>
+                              <Field
+                                type="number"
+                                min="0"
+                                name={`locationDetails.${index}.reservationSettings.gracePeriod`}
+                                className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.gracePeriod`, parseInt(e.target.value))}
+                                placeholder="e.g., 15"
                               />
                             </div>
                           </div>
@@ -1115,14 +1368,28 @@ export default function LocationDetails() {
             <div className="flex justify-between">
               <button
                 type="button"
-                onClick={() => navigate('/onboarding/contact-info')}
-                className="btn-secondary"
+                onClick={() => handleSave(values)}
+                className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
+                disabled={!hasUnsavedChanges}
               >
-                {t('back')}
+                {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
               </button>
-              <button type="submit" className="btn-primary">
-                {t('continue')}
-              </button>
+              <div className="flex space-x-4">
+                <button
+                  type="button"
+                  onClick={() => navigate('/onboarding/contact-info')}
+                  className="btn-secondary"
+                >
+                  {t('back')}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleNext(values)}
+                  className="btn-primary"
+                >
+                  {t('continue')}
+                </button>
+              </div>
             </div>
           </Form>
         )}

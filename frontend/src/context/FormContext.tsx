@@ -137,6 +137,7 @@ interface ReservationSettings {
 
 export interface LocationDetail {
   locationId: string
+  selectedLocationName?: string
   state: string
   streetAddress: string
   timeZone: string
@@ -252,6 +253,7 @@ interface FormState {
   tipsPolicy: TipsPolicy
   additionalNotes: string
   termsAccepted: boolean
+  lastSaved: string
 }
 
 // Actions
@@ -310,6 +312,7 @@ const initialState: FormState = {
   },
   additionalNotes: '',
   termsAccepted: false,
+  lastSaved: '',
 }
 
 // Reducer
@@ -320,7 +323,11 @@ function formReducer(state: FormState, action: FormAction): FormState {
     case 'SET_LOCATIONS':
       return { ...state, locations: action.payload }
     case 'SET_LOCATION_DETAILS':
-      return { ...state, locationDetails: action.payload }
+      return {
+        ...state,
+        locationDetails: action.payload,
+        lastSaved: new Date().toISOString()
+      }
     case 'SET_MENU_GROUPS':
       return { ...state, menuGroups: action.payload }
     case 'SET_MENU_FILES':

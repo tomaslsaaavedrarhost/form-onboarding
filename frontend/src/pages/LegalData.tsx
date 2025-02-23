@@ -43,10 +43,46 @@ const restaurantTypes = [
   { value: 'other', label: 'Other' },
 ]
 
+// Componente de notificación personalizado
+const Notification = ({ message, onClose }: { message: string; onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-4 right-4 z-50 animate-fade-in">
+      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4 flex items-center space-x-3">
+        <div className="flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        </div>
+        <p className="text-gray-800">{message}</p>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const LegalData = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { formData, updateField, updateFormData, uploadFile } = useFormProgress()
+  const { formData, updateField, updateFormData, uploadFile, saveFormData } = useFormProgress()
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showSavePrompt, setShowSavePrompt] = useState(false)
+  const [showNotification, setShowNotification] = useState(false)
   const [localData, setLocalData] = useState<FormState>({
     businessName: formData.businessName || '',
     legalBusinessName: formData.legalBusinessName || '',
@@ -78,6 +114,18 @@ const LegalData = () => {
     if (!formData) return;
     
     const hasChanges = Object.entries(formData).some(([key, value]) => {
+      // Para las ubicaciones, necesitamos una comparación más profunda
+      if (key === 'locations') {
+        const currentLocations = localData.locations || [];
+        const newLocations = value as Location[] || [];
+        return JSON.stringify(currentLocations) !== JSON.stringify(newLocations);
+      }
+      // Para los grupos, también necesitamos una comparación más profunda
+      if (key === 'groups') {
+        const currentGroups = localData.groups || [];
+        const newGroups = value as Group[] || [];
+        return JSON.stringify(currentGroups) !== JSON.stringify(newGroups);
+      }
       return localData[key as keyof FormState] !== value;
     });
 
@@ -90,30 +138,39 @@ const LegalData = () => {
       locationCount,
       locations: formData.locations || Array(locationCount).fill(null).map(() => ({ name: '', nameConfirmed: false }))
     }));
+
+    // Resetear el estado de cambios sin guardar cuando se actualiza desde formData
+    setHasUnsavedChanges(false);
   }, [formData]);
 
-  // Optimizamos el handleFieldChange para manejar inputs de forma más eficiente
+  // Función para guardar los cambios
+  const handleSave = async () => {
+    await saveFormData()
+    setHasUnsavedChanges(false)
+    setShowNotification(true)
+    setTimeout(() => setShowNotification(false), 3000)
+  }
+
+  // Modificar handleFieldChange para marcar cambios sin guardar
   const handleFieldChange = (
     fieldName: keyof FormState,
     value: any
   ) => {
-    // Actualizamos inmediatamente el estado local para mejor respuesta UI
-    setLocalData(prev => ({ ...prev, [fieldName]: value }));
+    setHasUnsavedChanges(true)
+    setLocalData(prev => ({ ...prev, [fieldName]: value }))
 
-    // Para campos de texto, actualizamos el estado global después de que el usuario termine de escribir
     if (typeof value === 'string' && ['legalBusinessName', 'taxId', 'otherRestaurantType'].includes(fieldName)) {
       if ((window as any).fieldUpdateTimeout) {
-        clearTimeout((window as any).fieldUpdateTimeout);
+        clearTimeout((window as any).fieldUpdateTimeout)
       }
       (window as any).fieldUpdateTimeout = setTimeout(() => {
-        updateField(fieldName, value);
-      }, 500);
-      return;
+        updateField(fieldName, value)
+      }, 500)
+      return
     }
 
-    // Para otros campos, actualizamos inmediatamente
-    updateField(fieldName, value);
-  };
+    updateField(fieldName, value)
+  }
 
   // Manejar subida de archivos
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,6 +228,11 @@ const LegalData = () => {
       });
     }
 
+    // Marcar que hay cambios sin guardar si el valor es diferente
+    if (newLocations[index].name !== value) {
+      setHasUnsavedChanges(true);
+    }
+
     newLocations[index].name = value;
     setLocalData(prev => ({ ...prev, locations: newLocations }));
     
@@ -190,6 +252,10 @@ const LegalData = () => {
     }
 
     const newLocations = [...localData.locations];
+    // Marcar que hay cambios sin guardar si estamos confirmando una ubicación
+    if (!newLocations[index].nameConfirmed) {
+      setHasUnsavedChanges(true);
+    }
     newLocations[index].nameConfirmed = true;
     setLocalData(prev => ({ ...prev, locations: newLocations }));
     updateField('locations', newLocations);
@@ -216,6 +282,8 @@ const LegalData = () => {
       }
     }
 
+    // Marcar que hay cambios sin guardar cuando se modifican los grupos
+    setHasUnsavedChanges(true);
     newGroups[index][field] = value
     setLocalData(prev => ({ ...prev, groups: newGroups }))
     updateField('groups', newGroups)
@@ -227,12 +295,63 @@ const LegalData = () => {
     return names[index] || `Grupo ${index + 1}`
   }
 
+  // Función para manejar la navegación
   const handleNext = () => {
-    navigate('/onboarding/contact-info')
+    if (hasUnsavedChanges) {
+      setShowSavePrompt(true)
+    } else {
+      navigate('/onboarding/contact-info')
+    }
+  }
+
+  // Componente para el modal de confirmación
+  const SavePrompt = () => {
+    if (!showSavePrompt) return null
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Cambios sin guardar
+          </h3>
+          <p className="text-gray-600 mb-6">
+            Tienes cambios sin guardar. ¿Qué deseas hacer?
+          </p>
+          <div className="flex justify-end space-x-4">
+            <button
+              onClick={() => {
+                setShowSavePrompt(false)
+                navigate('/onboarding/contact-info')
+              }}
+              className="btn-secondary"
+            >
+              Continuar sin guardar
+            </button>
+            <button
+              onClick={async () => {
+                await handleSave()
+                setShowSavePrompt(false)
+                navigate('/onboarding/contact-info')
+              }}
+              className="btn-primary"
+            >
+              Guardar y continuar
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
+      {showNotification && (
+        <Notification
+          message="Los cambios han sido guardados correctamente"
+          onClose={() => setShowNotification(false)}
+        />
+      )}
+      <SavePrompt />
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Datos Legales</h2>
         <p className="text-gray-600">
@@ -475,17 +594,24 @@ const LegalData = () => {
         )}
       </div>
 
-      <div className="flex justify-end mt-8">
+      <div className="flex justify-between space-x-4">
         <button
-          onClick={handleNext}
-          className="btn-primary"
-          disabled={
-            !localData.legalBusinessName || 
-            (!localData.sameMenuForAll && localData.groups.length < 2)
-          }
+          type="button"
+          onClick={handleSave}
+          className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
+          disabled={!hasUnsavedChanges}
         >
-          Siguiente
+          {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
         </button>
+        <div className="flex space-x-4">
+          <button
+            type="button"
+            onClick={handleNext}
+            className="btn-primary"
+          >
+            {t('continue')}
+          </button>
+        </div>
       </div>
     </div>
   )

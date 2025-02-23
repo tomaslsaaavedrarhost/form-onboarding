@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from '../hooks/useTranslation'
 import { useFormProgress } from '../hooks/useFormProgress'
@@ -50,15 +50,47 @@ const InfoTooltip = ({ text }: { text: string }) => {
   );
 };
 
+// Componente de notificación personalizado
+const Notification = ({ message, onClose }: { message: string; onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-4 right-4 z-50 animate-fade-in">
+      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4 flex items-center space-x-3">
+        <div className="flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        </div>
+        <p className="text-gray-800">{message}</p>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default function ContactInfo() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { formData, updateField } = useFormProgress()
-
-  // Helper function to get business name with fallback
-  const getBusinessName = () => formData.legalBusinessName || 'tu empresa';
-
-  const initialValues: FormValues = {
+  const { formData, updateField, saveFormData } = useFormProgress()
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showSavePrompt, setShowSavePrompt] = useState(false)
+  const [showNotification, setShowNotification] = useState(false)
+  const [localData, setLocalData] = useState<FormValues>({
     contactName: formData.contactName || '',
     phone: formData.phone || '',
     email: formData.email || '',
@@ -67,26 +99,112 @@ export default function ContactInfo() {
     state: formData.state || '',
     zipCode: formData.zipCode || '',
     sameForAllLocations: formData.sameForAllLocations ?? false,
-  }
+  })
 
-  const handleFieldChange = (field: keyof FormData, value: any) => {
+  // Helper function to get business name with fallback
+  const getBusinessName = () => formData.legalBusinessName || 'tu empresa';
+
+  // Sincronizar con formData cuando cambie
+  useEffect(() => {
+    if (!formData) return;
+
+    const newData = {
+      contactName: formData.contactName || '',
+      phone: formData.phone || '',
+      email: formData.email || '',
+      address: formData.address || '',
+      city: formData.city || '',
+      state: formData.state || '',
+      zipCode: formData.zipCode || '',
+      sameForAllLocations: formData.sameForAllLocations ?? false,
+    };
+
+    // Verificar si hay cambios reales
+    const hasChanges = Object.entries(newData).some(
+      ([key, value]) => localData[key as keyof FormValues] !== value
+    );
+
+    if (hasChanges) {
+      setLocalData(newData);
+      setHasUnsavedChanges(false);
+    }
+  }, [formData]);
+
+  const handleFieldChange = (field: keyof FormValues, value: any) => {
+    setHasUnsavedChanges(true)
+    setLocalData(prev => ({ ...prev, [field]: value }))
     updateField(field, value)
   }
 
-  const handleSubmit = (values: FormValues) => {
-    (Object.entries(values) as [keyof FormData, any][]).forEach(([field, value]) => {
-      updateField(field, value)
-    })
-    navigate('/onboarding/location-details')
+  const handleNext = (values: FormValues) => {
+    if (hasUnsavedChanges) {
+      setShowSavePrompt(true)
+    } else {
+      navigate('/onboarding/location-details')
+    }
+  }
+
+  const handleSave = async () => {
+    await saveFormData()
+    setHasUnsavedChanges(false)
+    setShowNotification(true)
+    setTimeout(() => setShowNotification(false), 3000)
+  }
+
+  // Componente para el modal de confirmación
+  const SavePrompt = () => {
+    if (!showSavePrompt) return null
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Cambios sin guardar
+          </h3>
+          <p className="text-gray-600 mb-6">
+            Tienes cambios sin guardar. ¿Qué deseas hacer?
+          </p>
+          <div className="flex justify-end space-x-4">
+            <button
+              onClick={() => {
+                setShowSavePrompt(false)
+                navigate('/onboarding/location-details')
+              }}
+              className="btn-secondary"
+            >
+              Continuar sin guardar
+            </button>
+            <button
+              onClick={async () => {
+                await handleSave()
+                setShowSavePrompt(false)
+                navigate('/onboarding/location-details')
+              }}
+              className="btn-primary"
+            >
+              Guardar y continuar
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      {showNotification && (
+        <Notification
+          message="Los cambios han sido guardados correctamente"
+          onClose={() => setShowNotification(false)}
+        />
+      )}
+      <SavePrompt />
       <h2 className="text-2xl font-bold text-gray-900 mb-8">Información de Contacto</h2>
       <Formik
-        initialValues={initialValues}
+        initialValues={localData}
         validationSchema={validationSchema}
-        onSubmit={handleSubmit}
+        onSubmit={handleNext}
+        enableReinitialize
       >
         {({ errors, touched, setFieldValue, values }) => (
           <Form className="space-y-8">
@@ -113,7 +231,6 @@ export default function ContactInfo() {
                       setFieldValue('contactName', value);
                       handleFieldChange('contactName', value);
                     }}
-                    value={values.contactName}
                   />
                   {errors.contactName && touched.contactName && (
                     <div className="error-message">{errors.contactName}</div>
@@ -140,7 +257,6 @@ export default function ContactInfo() {
                         setFieldValue('phone', value);
                         handleFieldChange('phone', value);
                       }}
-                      value={values.phone}
                     />
                     {errors.phone && touched.phone && (
                       <div className="error-message">{errors.phone}</div>
@@ -166,7 +282,6 @@ export default function ContactInfo() {
                         setFieldValue('email', value);
                         handleFieldChange('email', value);
                       }}
-                      value={values.email}
                     />
                     {errors.email && touched.email && (
                       <div className="error-message">{errors.email}</div>
@@ -199,7 +314,6 @@ export default function ContactInfo() {
                       setFieldValue('address', value);
                       handleFieldChange('address', value);
                     }}
-                    value={values.address}
                   />
                   {errors.address && touched.address && (
                     <div className="error-message">{errors.address}</div>
@@ -224,7 +338,6 @@ export default function ContactInfo() {
                         setFieldValue('city', value);
                         handleFieldChange('city', value);
                       }}
-                      value={values.city}
                     />
                     {errors.city && touched.city && (
                       <div className="error-message">{errors.city}</div>
@@ -248,7 +361,6 @@ export default function ContactInfo() {
                         setFieldValue('state', value);
                         handleFieldChange('state', value);
                       }}
-                      value={values.state}
                     />
                     {errors.state && touched.state && (
                       <div className="error-message">{errors.state}</div>
@@ -272,7 +384,6 @@ export default function ContactInfo() {
                         setFieldValue('zipCode', value);
                         handleFieldChange('zipCode', value);
                       }}
-                      value={values.zipCode}
                     />
                     {errors.zipCode && touched.zipCode && (
                       <div className="error-message">{errors.zipCode}</div>
@@ -282,17 +393,31 @@ export default function ContactInfo() {
               </div>
             </div>
 
-            <div className="flex justify-end space-x-4">
+            <div className="flex justify-between space-x-4">
               <button
                 type="button"
-                onClick={() => navigate(-1)}
-                className="btn-secondary"
+                onClick={handleSave}
+                className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
+                disabled={!hasUnsavedChanges}
               >
-                {t('back')}
+                {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
               </button>
-              <button type="submit" className="btn-primary">
-                {t('continue')}
-              </button>
+              <div className="flex space-x-4">
+                <button
+                  type="button"
+                  onClick={() => navigate('/onboarding/legal-data')}
+                  className="btn-secondary"
+                >
+                  {t('back')}
+                </button>
+                <button 
+                  type="submit"
+                  onClick={() => handleNext(values)}
+                  className="btn-primary"
+                >
+                  {t('continue')}
+                </button>
+              </div>
             </div>
           </Form>
         )}
