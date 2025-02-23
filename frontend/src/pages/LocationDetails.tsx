@@ -158,13 +158,73 @@ interface ReservationSettings {
   schedule: WeeklySchedule
 }
 
-interface ExtendedLocationDetail extends LocationDetail {
-  schedule: WeeklySchedule
-  paymentMethodsNotes: string
-  defaultTransferToHost: boolean
-  transferRules: any[]
-  reservationSettings: ReservationSettings
-  showPassword?: boolean
+interface ExtendedLocationDetail extends Omit<LocationDetail, 'reservationSettings'> {
+  paymentMethodsNotes: string;
+  defaultTransferToHost: boolean;
+  transferRules: any[];
+  reservationSettings: ReservationSettings;
+  showPassword?: boolean;
+  pickupSettings: {
+    platforms: string[];
+    preferredPlatform: string;
+    preferredPlatformLink: string;
+  };
+  deliverySettings: {
+    platforms: string[];
+    preferredPlatform: string;
+    preferredPlatformLink: string;
+  };
+  parking: {
+    hasParking: boolean;
+    parkingType?: 'free' | 'paid';
+    pricingDetails: string;
+    location: string;
+  };
+  corkage: {
+    allowed: boolean;
+    fee: string;
+  };
+  specialDiscounts: {
+    hasDiscounts: boolean;
+    details: string[];
+  };
+  holidayEvents: {
+    hasEvents: boolean;
+    events: any[];
+  };
+  specialEvents: {
+    hasEvents: boolean;
+    events: any[];
+  };
+  socialMedia: {
+    instagram: {
+      usesInstagram: boolean;
+      handle: string;
+    };
+  };
+  birthdayCelebrations: {
+    allowed: boolean;
+    details: string;
+    restrictions: string[];
+  };
+  dressCode: {
+    hasDressCode: boolean;
+    details: string;
+    exceptions: string[];
+  };
+  ageVerification: {
+    acceptedDocuments: string[];
+    otherDocuments: string;
+  };
+  smokingArea: {
+    hasSmokingArea: boolean;
+    details: string;
+  };
+  brunchMenu: {
+    hasBrunchMenu: boolean;
+    schedule: string;
+    menuFile: null | File;
+  };
 }
 
 interface FormValues {
@@ -257,15 +317,6 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
     },
     schedule: createEmptySchedule()
   },
-  waitTimes: {
-    monday: {},
-    tuesday: {},
-    wednesday: {},
-    thursday: {},
-    friday: {},
-    saturday: {},
-    sunday: {}
-  },
   pickupSettings: {
     platforms: [],
     preferredPlatform: '',
@@ -329,7 +380,7 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
   },
   paymentMethodsNotes: '',
   showPassword: false
-})
+});
 
 const validationSchema = Yup.object().shape({
   locationDetails: Yup.array().of(
