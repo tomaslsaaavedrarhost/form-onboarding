@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react'
+import React, { createContext, useContext, useState } from 'react'
+import { createEmptyLocation } from '../utils/locationUtils'
 
 // Types
 interface Location {
@@ -77,7 +78,7 @@ interface DaySchedule {
   timeSlots: TimeSlot[]
 }
 
-interface WeeklySchedule {
+export interface WeeklySchedule {
   [key: string]: DaySchedule
 }
 
@@ -118,19 +119,8 @@ interface ReservationSettings {
   acceptsReservations: boolean
   platform: string
   reservationLink: string
-  maxAdvanceTime?: number
-  maxAdvanceTimeUnit?: 'days' | 'weeks'
-  maxPartySize?: number
-  gracePeriod?: number
-  requireHalfParty?: boolean
-  waitTimes?: WaitTimes
   phoneCarrier: string
-  otherPhoneCarrier?: string
-  carrierCredentials?: {
-    username: string
-    password: string
-    pin: string
-  }
+  gracePeriod: number
   parking: ParkingDetails
   schedule: WeeklySchedule
 }
@@ -144,76 +134,110 @@ export interface LocationDetail {
   managerEmail: string
   phoneNumbers: string[]
   acceptedPaymentMethods: string[]
-  creditCardExclusions?: string
-  debitCardExclusions?: string
-  mobilePaymentExclusions?: string
+  creditCardExclusions: string
+  debitCardExclusions: string
+  mobilePaymentExclusions: string
   phoneCarrier: string
-  otherPhoneCarrier?: string
-  carrierCredentials?: {
-    username: string
-    password: string
-    pin: string
-  }
   schedule: WeeklySchedule
   defaultTransferToHost: boolean
-  transferRules: any[]
-  reservationSettings: ReservationSettings
-  waitTimes?: WaitTimes
-  pickupSettings: PickupSettings
-  deliverySettings: DeliverySettings
-  parking: ParkingDetails
+  transferRules: Array<{
+    type: string
+    number: string
+    description?: string
+    otherType?: string
+    index: number
+  }>
+  paymentMethodsNotes: string
+  reservationSettings: {
+    acceptsReservations: boolean
+    platform: string
+    reservationLink: string
+    phoneCarrier: string
+    gracePeriod: number
+    maxAdvanceTime?: number
+    maxAdvanceTimeUnit?: string
+    maxPartySize?: number
+    parking: {
+      hasParking: boolean
+      parkingType: string | undefined
+      pricingDetails: string
+      location: string
+    }
+    schedule: WeeklySchedule
+  }
+  waitTimes: {
+    [key: string]: {
+      [timeSlot: string]: string
+    }
+  }
+  pickupSettings: {
+    platforms: string[]
+    preferredPlatform: string
+    preferredPlatformLink: string
+  }
+  deliverySettings: {
+    platforms: string[]
+    preferredPlatform: string
+    preferredPlatformLink: string
+  }
+  parking: {
+    hasParking: boolean
+    parkingType: string | undefined
+    pricingDetails: string
+    location: string
+  }
   corkage: {
     allowed: boolean
-    fee?: string
+    fee: string
   }
   specialDiscounts: {
     hasDiscounts: boolean
-    details?: string[]
+    details: string[]
   }
   holidayEvents: {
     hasEvents: boolean
-    events?: {
-      date: string
+    events: Array<{
       name: string
+      date: string
       description: string
-    }[]
+    }>
   }
   specialEvents: {
     hasEvents: boolean
-    events?: {
-      type: string
-      frequency: string
+    events: Array<{
+      name: string
+      date: string
       description: string
-    }[]
+    }>
   }
   socialMedia: {
     instagram: {
       usesInstagram: boolean
-      handle?: string
+      handle: string
     }
   }
   birthdayCelebrations: {
     allowed: boolean
-    details?: string
-    restrictions?: string[]
+    details: string
+    restrictions: string[]
   }
   dressCode: {
     hasDressCode: boolean
-    details?: string
-    exceptions?: string[]
+    details: string
+    exceptions: string[]
   }
   ageVerification: {
     acceptedDocuments: string[]
-    otherDocuments?: string
+    otherDocuments: string
   }
   smokingArea: {
     hasSmokingArea: boolean
-    details?: string
+    details: string
   }
   brunchMenu: {
     hasBrunchMenu: boolean
-    schedule?: string
-    menuFile?: File | null
+    schedule: string
+    menuFile: File | null
   }
 }
 
@@ -367,47 +391,32 @@ function formReducer(state: FormState, action: FormAction): FormState {
 }
 
 // Context
-interface FormContextType {
-  state: FormState
-  dispatch: React.Dispatch<FormAction>
+export interface FormContextType {
+  state: FormState;
+  dispatch: React.Dispatch<FormAction>;
 }
 
 const FormContext = createContext<FormContextType | undefined>(undefined)
 
-// Provider Component
-interface FormProviderProps {
-  children: ReactNode
-}
-
-export function FormProvider({ children }: FormProviderProps) {
-  const [state, dispatch] = useReducer(formReducer, (() => {
-    // Try to load initial state from localStorage
-    const savedState = localStorage.getItem('formState')
-    return savedState ? JSON.parse(savedState) : initialState
-  })())
-
-  // Save state to localStorage whenever it changes
-  React.useEffect(() => {
-    localStorage.setItem('formState', JSON.stringify(state))
-  }, [state])
+export const FormProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, dispatch] = React.useReducer(formReducer, initialState);
 
   return (
     <FormContext.Provider value={{ state, dispatch }}>
       {children}
     </FormContext.Provider>
-  )
+  );
 }
 
-// Custom Hook
-export function useForm() {
+export const useForm = () => {
   const context = useContext(FormContext)
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useForm must be used within a FormProvider')
   }
   return context
 }
 
-export const createEmptySchedule = (): WeeklySchedule => {
+export function createEmptySchedule(): WeeklySchedule {
   const schedule: WeeklySchedule = {}
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
   days.forEach(day => {
@@ -419,104 +428,4 @@ export const createEmptySchedule = (): WeeklySchedule => {
   return schedule
 }
 
-export type { FormState, Location, MenuGroup, MenuFile, MenuConfig }
-
-export const createEmptyLocation = (): LocationDetail => ({
-  locationId: '',
-  state: '',
-  streetAddress: '',
-  timeZone: '',
-  managerEmail: '',
-  phoneNumbers: [],
-  acceptedPaymentMethods: [],
-  creditCardExclusions: '',
-  debitCardExclusions: '',
-  mobilePaymentExclusions: '',
-  phoneCarrier: '',
-  schedule: createEmptySchedule(),
-  defaultTransferToHost: false,
-  transferRules: [],
-  reservationSettings: {
-    acceptsReservations: false,
-    platform: '',
-    reservationLink: '',
-    phoneCarrier: '',
-    parking: {
-      hasParking: false,
-      parkingType: undefined,
-      pricingDetails: '',
-      location: ''
-    },
-    schedule: createEmptySchedule()
-  },
-  waitTimes: {
-    monday: {},
-    tuesday: {},
-    wednesday: {},
-    thursday: {},
-    friday: {},
-    saturday: {},
-    sunday: {}
-  },
-  pickupSettings: {
-    platforms: [],
-    preferredPlatform: '',
-    preferredPlatformLink: ''
-  },
-  deliverySettings: {
-    platforms: [],
-    preferredPlatform: '',
-    preferredPlatformLink: ''
-  },
-  parking: {
-    hasParking: false,
-    parkingType: undefined,
-    pricingDetails: '',
-    location: ''
-  },
-  corkage: {
-    allowed: false,
-    fee: ''
-  },
-  specialDiscounts: {
-    hasDiscounts: false,
-    details: []
-  },
-  holidayEvents: {
-    hasEvents: false,
-    events: []
-  },
-  specialEvents: {
-    hasEvents: false,
-    events: []
-  },
-  socialMedia: {
-    instagram: {
-      usesInstagram: false,
-      handle: ''
-    }
-  },
-  birthdayCelebrations: {
-    allowed: false,
-    details: '',
-    restrictions: []
-  },
-  dressCode: {
-    hasDressCode: false,
-    details: '',
-    exceptions: []
-  },
-  ageVerification: {
-    acceptedDocuments: [],
-    otherDocuments: ''
-  },
-  smokingArea: {
-    hasSmokingArea: false,
-    details: ''
-  },
-  brunchMenu: {
-    hasBrunchMenu: false,
-    schedule: '',
-    menuFile: null
-  }
-}) 
+export type { FormState, Location, MenuGroup, MenuFile, MenuConfig } 

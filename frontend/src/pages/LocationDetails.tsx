@@ -11,6 +11,7 @@ import type { Location } from '../context/FormContext'
 import { useFormikContext } from 'formik'
 import { useFormProgress } from '../hooks/useFormProgress'
 import { FormState } from '../context/FormContext'
+import { createEmptyLocation } from '../utils/locationUtils'
 
 // Lista de estados de EE.UU.
 const US_STATES = [
@@ -120,11 +121,22 @@ interface CarrierCredentials {
   pin: string
 }
 
+interface PhoneNumber {
+  value: string
+  index: number
+}
+
 interface TransferRule {
   type: string
   number: string
   description?: string
   otherType?: string
+  index: number
+}
+
+interface DiscountDetail {
+  value: string
+  index: number
 }
 
 interface TimeSlot {
@@ -143,92 +155,118 @@ interface WeeklySchedule {
   [key: string]: DaySchedule
 }
 
+interface ParkingDetails {
+  hasParking: boolean
+  parkingType: string | undefined
+  pricingDetails: string
+  location: string
+}
+
 interface ReservationSettings {
   acceptsReservations: boolean
   platform: string
   reservationLink: string
   phoneCarrier: string
   gracePeriod: number
-  parking: {
-    hasParking: boolean
-    parkingType?: 'free' | 'paid'
-    pricingDetails: string
-    location: string
-  }
+  parking: ParkingDetails
   schedule: WeeklySchedule
 }
 
-interface ExtendedLocationDetail extends Omit<LocationDetail, 'reservationSettings'> {
-  paymentMethodsNotes: string;
-  defaultTransferToHost: boolean;
-  transferRules: any[];
-  reservationSettings: ReservationSettings;
-  showPassword?: boolean;
+interface ExtendedLocationDetail {
+  locationId: string
+  selectedLocationName?: string
+  state: string
+  streetAddress: string
+  timeZone: string
+  managerEmail: string
+  phoneNumbers: string[]
+  acceptedPaymentMethods: string[]
+  creditCardExclusions: string
+  debitCardExclusions: string
+  mobilePaymentExclusions: string
+  phoneCarrier: string
+  schedule: WeeklySchedule
+  defaultTransferToHost: boolean
+  transferRules: any[]
+  paymentMethodsNotes: string
+  reservationSettings: ReservationSettings
+  waitTimes: {
+    [key: string]: {
+      [timeSlot: string]: string
+    }
+  }
   pickupSettings: {
-    platforms: string[];
-    preferredPlatform: string;
-    preferredPlatformLink: string;
-  };
+    platforms: string[]
+    preferredPlatform: string
+    preferredPlatformLink: string
+  }
   deliverySettings: {
-    platforms: string[];
-    preferredPlatform: string;
-    preferredPlatformLink: string;
-  };
-  parking: {
-    hasParking: boolean;
-    parkingType?: 'free' | 'paid';
-    pricingDetails: string;
-    location: string;
-  };
+    platforms: string[]
+    preferredPlatform: string
+    preferredPlatformLink: string
+  }
+  parking: ParkingDetails
   corkage: {
-    allowed: boolean;
-    fee: string;
-  };
+    allowed: boolean
+    fee: string
+  }
   specialDiscounts: {
-    hasDiscounts: boolean;
-    details: string[];
-  };
+    hasDiscounts: boolean
+    details: string[]
+  }
   holidayEvents: {
-    hasEvents: boolean;
-    events: any[];
-  };
+    hasEvents: boolean
+    events: any[]
+  }
   specialEvents: {
-    hasEvents: boolean;
-    events: any[];
-  };
+    hasEvents: boolean
+    events: any[]
+  }
   socialMedia: {
     instagram: {
-      usesInstagram: boolean;
-      handle: string;
-    };
-  };
+      usesInstagram: boolean
+      handle: string
+    }
+  }
   birthdayCelebrations: {
-    allowed: boolean;
-    details: string;
-    restrictions: string[];
-  };
+    allowed: boolean
+    details: string
+    restrictions: string[]
+  }
   dressCode: {
-    hasDressCode: boolean;
-    details: string;
-    exceptions: string[];
-  };
+    hasDressCode: boolean
+    details: string
+    exceptions: string[]
+  }
   ageVerification: {
-    acceptedDocuments: string[];
-    otherDocuments: string;
-  };
+    acceptedDocuments: string[]
+    otherDocuments: string
+  }
   smokingArea: {
-    hasSmokingArea: boolean;
-    details: string;
-  };
+    hasSmokingArea: boolean
+    details: string
+  }
   brunchMenu: {
-    hasBrunchMenu: boolean;
-    schedule: string;
-    menuFile: null | File;
-  };
+    hasBrunchMenu: boolean
+    schedule: string
+    menuFile: File | null
+  }
 }
 
 interface FormValues {
   locationDetails: ExtendedLocationDetail[]
+}
+
+interface FormContextType {
+  state: {
+    locationDetails: ExtendedLocationDetail[]
+    locations: Array<{
+      id: string
+      name: string
+      nameConfirmed: boolean
+    }>
+  }
+  dispatch: (action: { type: string; payload: any }) => void
 }
 
 const phoneRegExp = /^\+?1?\d{10,14}$/
@@ -277,110 +315,16 @@ const SectionTitle = ({ children }: { children: React.ReactNode }) => (
   </h3>
 )
 
-export const createEmptySchedule = () => {
-  const schedule: LocationDetail['schedule'] = {}
+export const createEmptySchedule = (): WeeklySchedule => {
+  const schedule: WeeklySchedule = {}
   DAYS_OF_WEEK.forEach(day => {
     schedule[day] = {
       enabled: false,
-      timeSlots: []
+      timeSlots: [] as TimeSlot[]
     }
   })
   return schedule
 }
-
-export const createEmptyLocation = (): ExtendedLocationDetail => ({
-  locationId: '',
-  state: '',
-  streetAddress: '',
-  timeZone: '',
-  managerEmail: '',
-  phoneNumbers: [],
-  acceptedPaymentMethods: [],
-  creditCardExclusions: '',
-  debitCardExclusions: '',
-  mobilePaymentExclusions: '',
-  phoneCarrier: '',
-  schedule: createEmptySchedule(),
-  defaultTransferToHost: false,
-  transferRules: [],
-  reservationSettings: {
-    acceptsReservations: false,
-    platform: '',
-    reservationLink: '',
-    phoneCarrier: '',
-    gracePeriod: 15,
-    parking: {
-      hasParking: false,
-      parkingType: undefined,
-      pricingDetails: '',
-      location: ''
-    },
-    schedule: createEmptySchedule()
-  },
-  pickupSettings: {
-    platforms: [],
-    preferredPlatform: '',
-    preferredPlatformLink: ''
-  },
-  deliverySettings: {
-    platforms: [],
-    preferredPlatform: '',
-    preferredPlatformLink: ''
-  },
-  parking: {
-    hasParking: false,
-    parkingType: undefined,
-    pricingDetails: '',
-    location: ''
-  },
-  corkage: {
-    allowed: false,
-    fee: ''
-  },
-  specialDiscounts: {
-    hasDiscounts: false,
-    details: []
-  },
-  holidayEvents: {
-    hasEvents: false,
-    events: []
-  },
-  specialEvents: {
-    hasEvents: false,
-    events: []
-  },
-  socialMedia: {
-    instagram: {
-      usesInstagram: false,
-      handle: ''
-    }
-  },
-  birthdayCelebrations: {
-    allowed: false,
-    details: '',
-    restrictions: []
-  },
-  dressCode: {
-    hasDressCode: false,
-    details: '',
-    exceptions: []
-  },
-  ageVerification: {
-    acceptedDocuments: [],
-    otherDocuments: ''
-  },
-  smokingArea: {
-    hasSmokingArea: false,
-    details: ''
-  },
-  brunchMenu: {
-    hasBrunchMenu: false,
-    schedule: '',
-    menuFile: null
-  },
-  paymentMethodsNotes: '',
-  showPassword: false
-});
 
 const validationSchema = Yup.object().shape({
   locationDetails: Yup.array().of(
@@ -646,7 +590,7 @@ export default function LocationDetails() {
         initialValues={{
           locationDetails: state.locationDetails?.length > 0 
             ? state.locationDetails 
-            : (state.locations || []).map((location): ExtendedLocationDetail => ({
+            : (state.locations || []).map((location: Location): ExtendedLocationDetail => ({
                 locationId: location.id,
                 selectedLocationName: location.name,
                 state: '',
@@ -655,10 +599,14 @@ export default function LocationDetails() {
                 managerEmail: '',
                 phoneNumbers: [],
                 acceptedPaymentMethods: [],
+                creditCardExclusions: '',
+                debitCardExclusions: '',
+                mobilePaymentExclusions: '',
                 phoneCarrier: '',
                 schedule: createEmptySchedule(),
                 defaultTransferToHost: false,
                 transferRules: [],
+                paymentMethodsNotes: '',
                 reservationSettings: {
                   acceptsReservations: false,
                   platform: '',
@@ -666,9 +614,21 @@ export default function LocationDetails() {
                   phoneCarrier: '',
                   gracePeriod: 15,
                   parking: {
-                    hasParking: false
+                    hasParking: false,
+                    parkingType: undefined,
+                    pricingDetails: '',
+                    location: ''
                   },
                   schedule: createEmptySchedule()
+                },
+                waitTimes: {
+                  monday: {},
+                  tuesday: {},
+                  wednesday: {},
+                  thursday: {},
+                  friday: {},
+                  saturday: {},
+                  sunday: {}
                 },
                 pickupSettings: {
                   platforms: [],
@@ -681,10 +641,14 @@ export default function LocationDetails() {
                   preferredPlatformLink: ''
                 },
                 parking: {
-                  hasParking: false
+                  hasParking: false,
+                  parkingType: undefined,
+                  pricingDetails: '',
+                  location: ''
                 },
                 corkage: {
-                  allowed: false
+                  allowed: false,
+                  fee: ''
                 },
                 specialDiscounts: {
                   hasDiscounts: false,
@@ -700,25 +664,33 @@ export default function LocationDetails() {
                 },
                 socialMedia: {
                   instagram: {
-                    usesInstagram: false
+                    usesInstagram: false,
+                    handle: ''
                   }
                 },
                 birthdayCelebrations: {
-                  allowed: false
+                  allowed: false,
+                  details: '',
+                  restrictions: []
                 },
                 dressCode: {
-                  hasDressCode: false
+                  hasDressCode: false,
+                  details: '',
+                  exceptions: []
                 },
                 ageVerification: {
-                  acceptedDocuments: []
+                  acceptedDocuments: [],
+                  otherDocuments: ''
                 },
                 smokingArea: {
-                  hasSmokingArea: false
+                  hasSmokingArea: false,
+                  details: ''
                 },
                 brunchMenu: {
-                  hasBrunchMenu: false
-                },
-                showPassword: false
+                  hasBrunchMenu: false,
+                  schedule: '',
+                  menuFile: null
+                }
               }))
         }}
         enableReinitialize={false}
@@ -780,15 +752,15 @@ export default function LocationDetails() {
                       >
                         <option value="">Selecciona una ubicación...</option>
                         {state.locations
-                          .filter(loc => loc.nameConfirmed && loc.name)
-                          .filter(loc => 
+                          .filter((loc: Location) => loc.nameConfirmed && loc.name)
+                          .filter((loc: Location) => 
                             !values.locationDetails.some(
-                              (detail, i) => 
+                              (detail: ExtendedLocationDetail, i: number) => 
                                 i !== index && 
                                 detail.selectedLocationName === loc.name
                             )
                           )
-                          .map(loc => (
+                          .map((loc: Location) => (
                             <option key={loc.name} value={loc.name}>
                               {loc.name}
                             </option>
@@ -884,7 +856,7 @@ export default function LocationDetails() {
                       <FieldArray name={`locationDetails.${index}.phoneNumbers`}>
                         {({ push, remove }) => (
                           <div className="space-y-2">
-                            {values.locationDetails[index].phoneNumbers.map((phone, phoneIndex) => (
+                            {values.locationDetails[index].phoneNumbers.map((phone: string, phoneIndex: number) => (
                               <div key={phoneIndex} className="flex gap-2">
                                 <Field
                                   type="tel"
@@ -1046,7 +1018,7 @@ export default function LocationDetails() {
                             <FieldArray name={`locationDetails.${index}.specialDiscounts.details`}>
                               {({ push, remove }) => (
                                 <div className="space-y-2">
-                                  {values.locationDetails[index].specialDiscounts.details?.map((detail, detailIndex) => (
+                                  {values.locationDetails[index].specialDiscounts.details?.map((detail: string, detailIndex: number) => (
                                     <div key={detailIndex} className="flex gap-2">
                                       <Field
                                         type="text"
@@ -1142,25 +1114,14 @@ export default function LocationDetails() {
                             <label htmlFor={`locationDetails.${index}.carrierCredentials.password`} className="block text-sm font-medium text-gray-700">
                               Account Password
                             </label>
-                            <div className="mt-1 relative">
+                            <div className="mt-1">
                               <Field
-                                type={values.locationDetails[index].showPassword ? "text" : "password"}
+                                type="text"
                                 name={`locationDetails.${index}.carrierCredentials.password`}
                                 placeholder="Enter your carrier account password"
                                 className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.password`, e.target.value)}
                               />
-                              <div className="mt-2">
-                                <label className="inline-flex items-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={values.locationDetails[index].showPassword || false}
-                                    onChange={(e) => handleFieldChange(setFieldValue, `locationDetails.${index}.showPassword`, e.target.checked)}
-                                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-600">Show password</span>
-                                </label>
-                              </div>
                             </div>
                           </div>
                           <div>
@@ -1230,7 +1191,7 @@ export default function LocationDetails() {
                             <FieldArray name={`locationDetails.${index}.transferRules`}>
                               {({ push, remove }) => (
                                 <div className="space-y-4">
-                                  {values.locationDetails[index].transferRules.map((rule, ruleIndex) => (
+                                  {values.locationDetails[index].transferRules.map((rule: TransferRule, ruleIndex: number) => (
                                     <div key={ruleIndex} className="grid grid-cols-1 gap-4 p-4 border border-gray-200 rounded-md">
                                       <div>
                                         <label className="block text-sm font-medium text-gray-700">Type of Inquiry</label>
