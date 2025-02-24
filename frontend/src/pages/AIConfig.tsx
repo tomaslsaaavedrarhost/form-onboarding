@@ -1,9 +1,11 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Formik, Form, Field } from 'formik'
 import * as Yup from 'yup'
 import { useForm } from '../context/FormContext'
 import { useTranslation } from '../hooks/useTranslation'
+import { useFormProgress } from '../hooks/useFormProgress'
+import { Notification } from '../components/Notification'
 
 const validationSchema = Yup.object().shape({
   language: Yup.string().required('Language is required'),
@@ -56,6 +58,10 @@ export default function AIConfig() {
   const navigate = useNavigate()
   const { state, dispatch } = useForm()
   const { t } = useTranslation()
+  const { saveFormData } = useFormProgress()
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [showSavePrompt, setShowSavePrompt] = useState(false)
+  const [showNotification, setShowNotification] = useState(false)
 
   const initialValues: FormValues = {
     language: state.aiConfig?.language || 'en',
@@ -68,6 +74,7 @@ export default function AIConfig() {
   }
 
   const handleFieldChange = (field: string, value: any) => {
+    setHasUnsavedChanges(true)
     dispatch({
       type: 'SET_AI_CONFIG',
       payload: {
@@ -78,214 +85,300 @@ export default function AIConfig() {
     })
   }
 
-  const handleSubmit = (values: FormValues) => {
-    dispatch({
-      type: 'SET_AI_CONFIG',
-      payload: {
-        ...values,
-        avatar: null
-      }
-    })
-    navigate('/onboarding/menu-config')
+  const handleSave = async (values: FormValues) => {
+    try {
+      dispatch({
+        type: 'SET_AI_CONFIG',
+        payload: {
+          ...values,
+          avatar: null
+        }
+      })
+      await saveFormData()
+      setHasUnsavedChanges(false)
+      setShowNotification(true)
+      setTimeout(() => setShowNotification(false), 3000)
+    } catch (error) {
+      console.error('Error al guardar:', error)
+    }
+  }
+
+  const handleNext = (values: FormValues) => {
+    if (hasUnsavedChanges) {
+      setShowSavePrompt(true)
+    } else {
+      dispatch({
+        type: 'SET_AI_CONFIG',
+        payload: {
+          ...values,
+          avatar: null
+        }
+      })
+      navigate('/onboarding/menu-config')
+    }
   }
 
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900">AI Assistant Configuration</h2>
+        <h2 className="text-2xl font-semibold text-gray-900">Configuración del Asistente Virtual</h2>
         <p className="mt-2 text-sm text-gray-600">
-          Configure how your AI assistant will interact with customers.
+          Personaliza la experiencia de tu asistente virtual para que se alinee con la identidad de tu restaurante
         </p>
       </div>
 
       <Formik
         initialValues={initialValues}
         validationSchema={validationSchema}
-        onSubmit={handleSubmit}
+        onSubmit={handleNext}
       >
         {({ values, errors, touched, setFieldValue }) => (
-          <Form className="space-y-6">
-            {/* Basic Configuration */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-              <h3 className="text-lg font-medium text-gray-900">Basic Configuration</h3>
+          <Form className="space-y-8">
+            {showNotification && (
+              <Notification
+                message="Los cambios han sido guardados correctamente"
+                onClose={() => setShowNotification(false)}
+              />
+            )}
 
-              <div>
-                <label htmlFor="language" className="form-label">
-                  Primary Language<span className="text-red-500">*</span>
-                </label>
-                <Field
-                  as="select"
-                  name="language"
-                  id="language"
-                  className="select-brand mt-2"
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                    const value = e.target.value;
-                    setFieldValue('language', value);
-                    handleFieldChange('language', value);
-                  }}
-                  value={values.language}
-                >
-                  <option value="">Select language...</option>
-                  {languages.map((lang) => (
-                    <option key={lang.value} value={lang.value}>
-                      {lang.label}
-                    </option>
-                  ))}
-                </Field>
-                {errors.language && touched.language && (
-                  <div className="error-message">{errors.language}</div>
-                )}
-                <p className="mt-2 text-sm text-gray-500">
-                  {t('secondaryLanguageNote')}
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="assistantName" className="form-label">
-                  Assistant Name (Optional)
-                </label>
-                <Field
-                  type="text"
-                  name="assistantName"
-                  id="assistantName"
-                  className="input-field mt-2"
-                  placeholder="Leave blank for default name"
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    const value = e.target.value;
-                    setFieldValue('assistantName', value);
-                    handleFieldChange('assistantName', value);
-                  }}
-                  value={values.assistantName}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="assistantGender" className="form-label">
-                  Assistant Gender<span className="text-red-500">*</span>
-                </label>
-                <Field
-                  as="select"
-                  name="assistantGender"
-                  id="assistantGender"
-                  className="select-brand mt-2"
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                    const value = e.target.value;
-                    setFieldValue('assistantGender', value);
-                    handleFieldChange('assistantGender', value);
-                  }}
-                  value={values.assistantGender}
-                >
-                  <option value="">Select gender...</option>
-                  {genderOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Field>
-                {errors.assistantGender && touched.assistantGender && (
-                  <div className="error-message">{errors.assistantGender}</div>
-                )}
-              </div>
-            </div>
-
-            {/* Personality Configuration */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-              <h3 className="text-lg font-medium text-gray-900">Personality Configuration</h3>
-
-              <div>
-                <label className="form-label">Personality Trait<span className="text-red-500">*</span></label>
-                <div className="mt-2 space-y-2">
-                  {personalityTraits.map((trait) => (
-                    <div key={trait.value} className="flex items-center">
-                      <Field
-                        type="radio"
-                        name="personality"
-                        value={trait.value}
-                        id={`personality-${trait.value}`}
-                        className="h-4 w-4 border-gray-300 text-primary-600 focus:ring-primary-600"
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setFieldValue('personality', e.target.value)
-                          handleFieldChange('personality', e.target.value)
-                        }}
-                      />
-                      <label
-                        htmlFor={`personality-${trait.value}`}
-                        className="ml-2 block text-sm text-gray-900"
-                      >
-                        {trait.label}
-                      </label>
-                    </div>
-                  ))}
+            {showSavePrompt && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4 shadow-xl">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    Cambios sin guardar
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    Tienes cambios sin guardar. ¿Qué deseas hacer?
+                  </p>
+                  <div className="flex justify-end space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSavePrompt(false);
+                        handleNext(values);
+                      }}
+                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all"
+                    >
+                      Continuar sin guardar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleSave(values);
+                        setShowSavePrompt(false);
+                        handleNext(values);
+                      }}
+                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-[#2563eb] to-[#1d4ed8] rounded-md shadow-sm hover:from-[#1d4ed8] hover:to-[#1e40af] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all"
+                    >
+                      Guardar y continuar
+                    </button>
+                  </div>
                 </div>
-                {errors.personality && touched.personality && (
-                  <div className="error-message">{errors.personality}</div>
-                )}
+              </div>
+            )}
+
+            <div className="bg-white shadow rounded-lg overflow-hidden">
+              <div className="p-6 space-y-6">
+                <div>
+                  <label htmlFor="language" className="block text-sm font-medium text-gray-700">
+                    Idioma Principal<span className="text-red-500">*</span>
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Selecciona el idioma principal en el que el asistente se comunicará
+                  </p>
+                  <Field
+                    as="select"
+                    id="language"
+                    name="language"
+                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                      const value = e.target.value;
+                      setFieldValue('language', value);
+                      handleFieldChange('language', value);
+                    }}
+                  >
+                    <option value="">Selecciona el idioma principal...</option>
+                    {languages.map(lang => (
+                      <option key={lang.value} value={lang.value}>
+                        {lang.label}
+                      </option>
+                    ))}
+                  </Field>
+                  {errors.language && touched.language && (
+                    <p className="mt-2 text-sm text-red-600">{errors.language}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="assistantName" className="block text-sm font-medium text-gray-700">
+                    Nombre del Asistente
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Personaliza el nombre de tu asistente virtual o deja en blanco para usar el nombre por defecto
+                  </p>
+                  <Field
+                    type="text"
+                    id="assistantName"
+                    name="assistantName"
+                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Ej: María, Alex"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const value = e.target.value;
+                      setFieldValue('assistantName', value);
+                      handleFieldChange('assistantName', value);
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="assistantGender" className="block text-sm font-medium text-gray-700">
+                    Género del Asistente<span className="text-red-500">*</span>
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Selecciona el género que mejor represente a tu asistente virtual
+                  </p>
+                  <Field
+                    as="select"
+                    id="assistantGender"
+                    name="assistantGender"
+                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                      const value = e.target.value;
+                      setFieldValue('assistantGender', value);
+                      handleFieldChange('assistantGender', value);
+                    }}
+                  >
+                    <option value="">Selecciona el género...</option>
+                    {genderOptions.map(gender => (
+                      <option key={gender.value} value={gender.value}>
+                        {gender.label}
+                      </option>
+                    ))}
+                  </Field>
+                  {errors.assistantGender && touched.assistantGender && (
+                    <p className="mt-2 text-sm text-red-600">{errors.assistantGender}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="personality" className="block text-sm font-medium text-gray-700">
+                    Personalidad<span className="text-red-500">*</span>
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Define el estilo de comunicación y la personalidad de tu asistente
+                  </p>
+                  <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {personalityTraits.map(trait => (
+                      <label
+                        key={trait.value}
+                        className={`relative flex cursor-pointer rounded-lg border p-4 shadow-sm focus:outline-none ${
+                          values.personality === trait.value
+                            ? 'border-indigo-500 ring-2 ring-indigo-500'
+                            : 'border-gray-300'
+                        }`}
+                      >
+                        <Field
+                          type="radio"
+                          name="personality"
+                          value={trait.value}
+                          className="sr-only"
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                            const value = e.target.value;
+                            setFieldValue('personality', value);
+                            handleFieldChange('personality', value);
+                          }}
+                        />
+                        <span className="flex flex-1">
+                          <span className="flex flex-col">
+                            <span className="block text-sm font-medium text-gray-900">
+                              {trait.label}
+                            </span>
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {errors.personality && touched.personality && (
+                    <p className="mt-2 text-sm text-red-600">{errors.personality}</p>
+                  )}
+                </div>
 
                 {values.personality === 'other' && (
-                  <div className="mt-4">
-                    <label htmlFor="otherPersonality" className="form-label">
-                      Describe the personality<span className="text-red-500">*</span>
+                  <div>
+                    <label htmlFor="otherPersonality" className="block text-sm font-medium text-gray-700">
+                      Describe la personalidad
                     </label>
                     <Field
-                      type="text"
-                      name="otherPersonality"
+                      as="textarea"
                       id="otherPersonality"
-                      className="input-field mt-2"
-                      placeholder="Describe the desired personality trait..."
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      name="otherPersonality"
+                      rows={3}
+                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                      placeholder="Describe el estilo de personalidad que deseas para tu asistente"
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                         const value = e.target.value;
                         setFieldValue('otherPersonality', value);
                         handleFieldChange('otherPersonality', value);
                       }}
-                      value={values.otherPersonality}
                     />
                     {errors.otherPersonality && touched.otherPersonality && (
-                      <div className="error-message">{errors.otherPersonality}</div>
+                      <p className="mt-2 text-sm text-red-600">{errors.otherPersonality}</p>
                     )}
                   </div>
                 )}
+
+                <div>
+                  <label htmlFor="additionalInfo" className="block text-sm font-medium text-gray-700">
+                    Información Adicional
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Agrega cualquier información adicional que ayude a personalizar mejor tu asistente virtual
+                  </p>
+                  <Field
+                    as="textarea"
+                    id="additionalInfo"
+                    name="additionalInfo"
+                    rows={4}
+                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder="Ej: Preferencias específicas de comunicación, temas a evitar, etc."
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                      const value = e.target.value;
+                      setFieldValue('additionalInfo', value);
+                      handleFieldChange('additionalInfo', value);
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Additional Information */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-              <h3 className="text-lg font-medium text-gray-900">Additional Information</h3>
-              
-              <div>
-                <label htmlFor="additionalInfo" className="form-label">
-                  Other Relevant Information
-                </label>
-                <Field
-                  as="textarea"
-                  name="additionalInfo"
-                  id="additionalInfo"
-                  rows={4}
-                  className="input-field mt-2"
-                  placeholder="Please provide any additional details or important information that may be helpful for the assistant..."
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                    const value = e.target.value;
-                    setFieldValue('additionalInfo', value);
-                    handleFieldChange('additionalInfo', value);
-                  }}
-                  value={values.additionalInfo}
-                />
-                {errors.additionalInfo && touched.additionalInfo && (
-                  <div className="error-message">{errors.additionalInfo}</div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between">
+            <div className="flex justify-between pt-6">
               <button
                 type="button"
                 onClick={() => navigate('/onboarding/location-details')}
-                className="btn-secondary"
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all"
               >
-                Back
+                Atrás
               </button>
-              <button type="submit" className="btn-primary">
-                Continue
-              </button>
+              <div className="flex space-x-4">
+                <button
+                  type="button"
+                  onClick={() => handleSave(values)}
+                  className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all ${
+                    hasUnsavedChanges
+                      ? 'text-white bg-gradient-to-r from-[#2563eb] to-[#1d4ed8] hover:from-[#1d4ed8] hover:to-[#1e40af]'
+                      : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                  }`}
+                  disabled={!hasUnsavedChanges}
+                >
+                  {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-[#2563eb] to-[#1d4ed8] rounded-md shadow-sm hover:from-[#1d4ed8] hover:to-[#1e40af] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all"
+                >
+                  Continuar
+                </button>
+              </div>
             </div>
           </Form>
         )}

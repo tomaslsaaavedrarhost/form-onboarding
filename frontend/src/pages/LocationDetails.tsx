@@ -7,10 +7,11 @@ import type { LocationDetail, WeeklySchedule as WeeklyScheduleType } from '../co
 import { useTranslation } from '../hooks/useTranslation'
 import { TimeSlots } from '../components/TimeSlots'
 import WeeklyScheduleComponent from '../components/WeeklySchedule'
-import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
+import { ChevronDownIcon } from '@heroicons/react/24/outline'
 import { useFormikContext } from 'formik'
 import { useFormProgress } from '../hooks/useFormProgress'
 import { createEmptyLocation } from '../utils/locationUtils'
+import { Notification } from '../components/Notification'
 
 // Lista de estados de EE.UU.
 const US_STATES = [
@@ -449,39 +450,6 @@ interface WaitTimes {
   };
 }
 
-// Componente de notificación personalizado
-const Notification = ({ message, onClose }: { message: string; onClose: () => void }) => {
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return (
-    <div className="fixed top-4 right-4 z-50 animate-fade-in">
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4 flex items-center space-x-3">
-        <div className="flex-shrink-0">
-          <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        </div>
-        <p className="text-gray-800">{message}</p>
-        <button
-          onClick={onClose}
-          className="flex-shrink-0 text-gray-400 hover:text-gray-600"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-};
-
 const LocationDetails: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -605,20 +573,6 @@ const LocationDetails: React.FC = () => {
 
   return (
     <div className="space-y-8 overflow-y-auto max-h-screen pb-20">
-      {showNotification && (
-        <Notification
-          message="Los cambios han sido guardados correctamente"
-          onClose={() => setShowNotification(false)}
-        />
-      )}
-      
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900">{t('locationDetailsTitle')}</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          {t('locationDetailsSubtitle')}
-        </p>
-      </div>
-
       <Formik
         initialValues={{
           locationDetails: state.locationDetails?.length > 0 
@@ -634,6 +588,12 @@ const LocationDetails: React.FC = () => {
       >
         {({ values, setFieldValue }) => (
           <Form className="space-y-8">
+            {showNotification && (
+              <Notification
+                message="Los cambios han sido guardados correctamente"
+                onClose={() => setShowNotification(false)}
+              />
+            )}
             <SavePrompt values={values} />
             
             {values.locationDetails.map((location: ExtendedLocationDetail, index: number) => (
