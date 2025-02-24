@@ -113,12 +113,27 @@ const LegalData = () => {
   useEffect(() => {
     if (!formData) return;
     
+    console.log('Verificando cambios en formData:', {
+      currentLocations: localData.locations,
+      newLocations: formData.locations,
+      locationCount: formData.locationCount
+    });
+    
     const hasChanges = Object.entries(formData).some(([key, value]) => {
       // Para las ubicaciones, necesitamos una comparación más profunda
       if (key === 'locations') {
         const currentLocations = localData.locations || [];
         const newLocations = value as Location[] || [];
-        return JSON.stringify(currentLocations) !== JSON.stringify(newLocations);
+        const hasLocationChanges = JSON.stringify(currentLocations) !== JSON.stringify(newLocations);
+        
+        if (hasLocationChanges) {
+          console.log('Detectados cambios en ubicaciones:', {
+            current: currentLocations,
+            new: newLocations
+          });
+        }
+        
+        return hasLocationChanges;
       }
       // Para los grupos, también necesitamos una comparación más profunda
       if (key === 'groups') {
@@ -129,19 +144,88 @@ const LegalData = () => {
       return localData[key as keyof FormState] !== value;
     });
 
-    if (!hasChanges) return;
+    if (!hasChanges) {
+      console.log('No se detectaron cambios en formData');
+      return;
+    }
 
     const locationCount = typeof formData.locationCount === 'number' ? formData.locationCount : 1;
+    console.log('Actualizando estado local con nuevo locationCount:', locationCount);
+    
+    // Preservar las ubicaciones existentes y agregar nuevas si es necesario
+    const updatedLocations = Array(locationCount).fill(null).map((_, index) => {
+      // Intentar mantener la ubicación existente si existe
+      const existingLocation = formData.locations?.[index] || localData.locations?.[index];
+      if (existingLocation) {
+        console.log(`Manteniendo ubicación existente ${index}:`, existingLocation);
+        return existingLocation;
+      }
+      // Crear nueva ubicación si no existe
+      console.log(`Creando nueva ubicación ${index}`);
+      return { name: '', nameConfirmed: false };
+    });
+
     setLocalData(prev => ({
       ...prev,
       ...formData,
       locationCount,
-      locations: formData.locations || Array(locationCount).fill(null).map(() => ({ name: '', nameConfirmed: false }))
+      locations: updatedLocations
     }));
 
     // Resetear el estado de cambios sin guardar cuando se actualiza desde formData
     setHasUnsavedChanges(false);
   }, [formData]);
+
+  // Agregar useEffect para validar la consistencia de datos
+  useEffect(() => {
+    console.log('Validando consistencia de datos:', {
+      locationCount: localData.locationCount,
+      actualLocations: localData.locations.length,
+      locations: localData.locations
+    });
+
+    // Validar que la cantidad de ubicaciones coincida con locationCount
+    if (localData.locationCount !== localData.locations.length) {
+      console.warn('Inconsistencia detectada: locationCount no coincide con el número de ubicaciones');
+      
+      // Ajustar el array de ubicaciones para que coincida con locationCount
+      const newLocations = Array(localData.locationCount).fill(null).map((_, index) => {
+        return localData.locations[index] || { name: '', nameConfirmed: false };
+      });
+      
+      console.log('Ajustando array de ubicaciones:', newLocations);
+      
+      setLocalData(prev => ({
+        ...prev,
+        locations: newLocations
+      }));
+      
+      // Actualizar el estado global
+      updateField('locations', newLocations);
+    }
+
+    // Validar que no haya ubicaciones vacías si están confirmadas
+    const hasInvalidLocations = localData.locations.some(
+      location => location.nameConfirmed && !location.name.trim()
+    );
+
+    if (hasInvalidLocations) {
+      console.error('Se detectaron ubicaciones confirmadas sin nombre:', 
+        localData.locations.filter(loc => loc.nameConfirmed && !loc.name.trim())
+      );
+    }
+
+    // Validar que todas las ubicaciones tengan un estado válido
+    localData.locations.forEach((location, index) => {
+      if (location.nameConfirmed && !location.name.trim()) {
+        console.error(`Ubicación ${index} está confirmada pero no tiene nombre`);
+      }
+      if (!location.nameConfirmed && location.name.trim()) {
+        console.warn(`Ubicación ${index} tiene nombre pero no está confirmada`);
+      }
+    });
+
+  }, [localData.locationCount, localData.locations]);
 
   // Función para guardar los cambios
   const handleSave = async () => {
@@ -209,6 +293,12 @@ const LegalData = () => {
 
   // Manejar cambios en las ubicaciones
   const handleLocationChange = (index: number, value: string) => {
+    console.log('Modificando ubicación:', {
+      index,
+      newValue: value,
+      currentLocation: localData.locations[index]
+    });
+
     const newLocations = [...localData.locations];
     if (!newLocations[index]) {
       newLocations[index] = { name: '', nameConfirmed: false };
@@ -216,6 +306,7 @@ const LegalData = () => {
 
     // Verificar duplicados
     if (value.trim() !== '' && isDuplicateLocationName(value, index)) {
+      console.warn('Nombre de ubicación duplicado detectado:', value);
       setLocationErrors(prev => ({
         ...prev,
         [index]: 'Este nombre de ubicación ya existe'
@@ -234,31 +325,47 @@ const LegalData = () => {
     }
 
     newLocations[index].name = value;
+    // Desconfirmar la ubicación si se cambia el nombre
+    newLocations[index].nameConfirmed = false;
+    
     setLocalData(prev => ({ ...prev, locations: newLocations }));
     
     if ((window as any).locationUpdateTimeout) {
       clearTimeout((window as any).locationUpdateTimeout);
     }
     (window as any).locationUpdateTimeout = setTimeout(() => {
+      console.log('Actualizando ubicaciones en el estado global:', newLocations);
       updateField('locations', newLocations);
     }, 500);
   };
 
   // Manejar confirmación de nombres de ubicación
   const handleLocationConfirm = (index: number) => {
+    console.log('Confirmando ubicación:', {
+      index,
+      location: localData.locations[index]
+    });
+
     // No permitir confirmar si hay un error
     if (locationErrors[index]) {
+      console.warn('No se puede confirmar ubicación con errores:', locationErrors[index]);
+      return;
+    }
+
+    // No permitir confirmar si el nombre está vacío
+    if (!localData.locations[index].name.trim()) {
+      console.warn('No se puede confirmar ubicación sin nombre');
       return;
     }
 
     const newLocations = [...localData.locations];
-    // Marcar que hay cambios sin guardar si estamos confirmando una ubicación
-    if (!newLocations[index].nameConfirmed) {
-      setHasUnsavedChanges(true);
-    }
     newLocations[index].nameConfirmed = true;
+    
+    console.log('Actualizando estado de confirmación:', newLocations[index]);
+    
     setLocalData(prev => ({ ...prev, locations: newLocations }));
     updateField('locations', newLocations);
+    setHasUnsavedChanges(true);
   };
 
   // Manejar cambios en grupos
@@ -448,13 +555,19 @@ const LegalData = () => {
               if (!isNaN(val) && val >= 1 && val <= 50) {
                 setLocalData(prev => ({
                   ...prev,
-                  locationCount: val
+                  locationCount: val,
+                  locations: Array(val).fill(null).map((_, i) => 
+                    prev.locations[i] || { name: '', nameConfirmed: false }
+                  )
                 }));
                 
-                clearTimeout((window as any).locationUpdateTimeout);
-                (window as any).locationUpdateTimeout = setTimeout(() => {
-                  handleFieldChange('locationCount', val);
-                }, 300);
+                // Actualizar inmediatamente el estado global
+                updateField('locationCount', val);
+                updateField('locations', Array(val).fill(null).map((_, i) => 
+                  localData.locations[i] || { name: '', nameConfirmed: false }
+                ));
+                
+                setHasUnsavedChanges(true);
               }
             }}
             className="input-field"

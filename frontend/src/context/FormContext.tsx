@@ -138,6 +138,12 @@ export interface LocationDetail {
   debitCardExclusions: string
   mobilePaymentExclusions: string
   phoneCarrier: string
+  otherPhoneCarrier?: string
+  carrierCredentials: {
+    username: string
+    password: string
+    pin: string
+  }
   schedule: WeeklySchedule
   defaultTransferToHost: boolean
   transferRules: Array<{

@@ -1,16 +1,15 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Formik, Form, Field, FieldArray } from 'formik'
 import * as Yup from 'yup'
-import { useForm, type LocationDetail } from '../context/FormContext'
+import { useForm } from '../context/FormContext'
+import type { LocationDetail, WeeklySchedule as WeeklyScheduleType } from '../context/FormContext'
 import { useTranslation } from '../hooks/useTranslation'
 import { TimeSlots } from '../components/TimeSlots'
-import WeeklySchedule from '../components/WeeklySchedule'
+import WeeklyScheduleComponent from '../components/WeeklySchedule'
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
-import type { Location } from '../context/FormContext'
 import { useFormikContext } from 'formik'
 import { useFormProgress } from '../hooks/useFormProgress'
-import { FormState } from '../context/FormContext'
 import { createEmptyLocation } from '../utils/locationUtils'
 
 // Lista de estados de EE.UU.
@@ -73,7 +72,8 @@ const PHONE_CARRIERS = [
   'VERIZON WIRELESS',
   'AT&T MOBILITY',
   'T-MOBILE USA',
-  'SPRINT CORPORATION'
+  'SPRINT CORPORATION',
+  'OTHER'
 ] as const
 
 // Lista de métodos de pago
@@ -172,7 +172,7 @@ interface ReservationSettings {
   schedule: WeeklySchedule
 }
 
-interface ExtendedLocationDetail {
+export interface ExtendedLocationDetail {
   locationId: string
   selectedLocationName?: string
   state: string
@@ -185,9 +185,11 @@ interface ExtendedLocationDetail {
   debitCardExclusions: string
   mobilePaymentExclusions: string
   phoneCarrier: string
+  otherPhoneCarrier?: string
+  carrierCredentials: CarrierCredentials
   schedule: WeeklySchedule
   defaultTransferToHost: boolean
-  transferRules: any[]
+  transferRules: TransferRule[]
   paymentMethodsNotes: string
   reservationSettings: ReservationSettings
   waitTimes: {
@@ -199,11 +201,13 @@ interface ExtendedLocationDetail {
     platforms: string[]
     preferredPlatform: string
     preferredPlatformLink: string
+    otherPlatform?: string
   }
   deliverySettings: {
     platforms: string[]
     preferredPlatform: string
     preferredPlatformLink: string
+    otherPlatform?: string
   }
   parking: ParkingDetails
   corkage: {
@@ -250,6 +254,7 @@ interface ExtendedLocationDetail {
     hasBrunchMenu: boolean
     schedule: string
     menuFile: File | null
+    menuUrl?: string
   }
 }
 
@@ -477,29 +482,54 @@ const Notification = ({ message, onClose }: { message: string; onClose: () => vo
   );
 };
 
-export default function LocationDetails() {
+const LocationDetails: React.FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { state, dispatch } = useForm()
-  const { saveFormData } = useFormProgress()
+  const { formData, saveFormData } = useFormProgress()
   const [expandedLocations, setExpandedLocations] = useState<string[]>([])
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
 
-  const toggleLocationExpanded = (id: string) => {
+  // Validar el estado inicial y las ubicaciones
+  useEffect(() => {
+    console.log('Iniciando validación de ubicaciones:', {
+      locationCount: formData.locationCount,
+      locationDetails: state.locationDetails
+    });
+
+    const count = typeof formData.locationCount === 'number' ? formData.locationCount : 0;
+
+    // Solo expandir la primera ubicación si ninguna está expandida
+    if (expandedLocations.length === 0 && count > 0) {
+      const firstLocationId = '1';
+      console.log('Expandiendo primera ubicación:', firstLocationId);
+      setExpandedLocations([firstLocationId]);
+    }
+
+  }, [formData.locationCount, expandedLocations]);
+
+  const toggleAccordion = (id: string) => {
     setExpandedLocations(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     )
   }
 
   const handleFieldChange = (setFieldValue: any, field: string, value: any) => {
-    setHasUnsavedChanges(true)
-    setFieldValue(field, value)
-  }
+    console.log('Campo modificado:', {
+      field,
+      value
+    });
+    
+    setHasUnsavedChanges(true);
+    setFieldValue(field, value);
+  };
 
   const handleSave = async (values: FormValues) => {
     try {
+      console.log('Guardando detalles de ubicación:', values);
+      
       const locationDetails = values.locationDetails.map(location => ({
         ...location,
         phoneNumbers: location.phoneNumbers || [],
@@ -510,17 +540,19 @@ export default function LocationDetails() {
           pricingDetails: location.parking?.pricingDetails || '',
           location: location.parking?.location || ''
         }
-      }))
+      }));
+
+      await dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails });
+      await saveFormData();
+      setHasUnsavedChanges(false);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
       
-      await dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails })
-      await saveFormData()
-      setHasUnsavedChanges(false)
-      setShowNotification(true)
-      setTimeout(() => setShowNotification(false), 3000)
+      console.log('Detalles guardados exitosamente');
     } catch (error) {
-      console.error('Error saving location details:', error)
+      console.error('Error al guardar los detalles:', error);
     }
-  }
+  };
 
   const handleNext = (values: FormValues) => {
     if (hasUnsavedChanges) {
@@ -572,13 +604,14 @@ export default function LocationDetails() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 overflow-y-auto max-h-screen pb-20">
       {showNotification && (
         <Notification
           message="Los cambios han sido guardados correctamente"
           onClose={() => setShowNotification(false)}
         />
       )}
+      
       <div>
         <h2 className="text-2xl font-semibold text-gray-900">{t('locationDetailsTitle')}</h2>
         <p className="mt-2 text-sm text-gray-600">
@@ -590,142 +623,50 @@ export default function LocationDetails() {
         initialValues={{
           locationDetails: state.locationDetails?.length > 0 
             ? state.locationDetails 
-            : (state.locations || []).map((location: Location): ExtendedLocationDetail => ({
-                locationId: location.id,
-                selectedLocationName: location.name,
-                state: '',
-                streetAddress: '',
-                timeZone: '',
-                managerEmail: '',
-                phoneNumbers: [],
-                acceptedPaymentMethods: [],
-                creditCardExclusions: '',
-                debitCardExclusions: '',
-                mobilePaymentExclusions: '',
-                phoneCarrier: '',
-                schedule: createEmptySchedule(),
-                defaultTransferToHost: false,
-                transferRules: [],
-                paymentMethodsNotes: '',
-                reservationSettings: {
-                  acceptsReservations: false,
-                  platform: '',
-                  reservationLink: '',
-                  phoneCarrier: '',
-                  gracePeriod: 15,
-                  parking: {
-                    hasParking: false,
-                    parkingType: undefined,
-                    pricingDetails: '',
-                    location: ''
-                  },
-                  schedule: createEmptySchedule()
-                },
-                waitTimes: {
-                  monday: {},
-                  tuesday: {},
-                  wednesday: {},
-                  thursday: {},
-                  friday: {},
-                  saturday: {},
-                  sunday: {}
-                },
-                pickupSettings: {
-                  platforms: [],
-                  preferredPlatform: '',
-                  preferredPlatformLink: ''
-                },
-                deliverySettings: {
-                  platforms: [],
-                  preferredPlatform: '',
-                  preferredPlatformLink: ''
-                },
-                parking: {
-                  hasParking: false,
-                  parkingType: undefined,
-                  pricingDetails: '',
-                  location: ''
-                },
-                corkage: {
-                  allowed: false,
-                  fee: ''
-                },
-                specialDiscounts: {
-                  hasDiscounts: false,
-                  details: []
-                },
-                holidayEvents: {
-                  hasEvents: false,
-                  events: []
-                },
-                specialEvents: {
-                  hasEvents: false,
-                  events: []
-                },
-                socialMedia: {
-                  instagram: {
-                    usesInstagram: false,
-                    handle: ''
-                  }
-                },
-                birthdayCelebrations: {
-                  allowed: false,
-                  details: '',
-                  restrictions: []
-                },
-                dressCode: {
-                  hasDressCode: false,
-                  details: '',
-                  exceptions: []
-                },
-                ageVerification: {
-                  acceptedDocuments: [],
-                  otherDocuments: ''
-                },
-                smokingArea: {
-                  hasSmokingArea: false,
-                  details: ''
-                },
-                brunchMenu: {
-                  hasBrunchMenu: false,
-                  schedule: '',
-                  menuFile: null
-                }
+            : Array(typeof formData.locationCount === 'number' ? formData.locationCount : 0).fill(null).map((_, index) => ({
+                ...createEmptyLocation(),
+                locationId: String(index + 1)
               }))
         }}
-        enableReinitialize={false}
+        enableReinitialize={true}
         validationSchema={validationSchema}
-        onSubmit={(values) => handleNext(values)}
+        onSubmit={handleNext}
       >
         {({ values, setFieldValue }) => (
           <Form className="space-y-8">
             <SavePrompt values={values} />
             
             {values.locationDetails.map((location: ExtendedLocationDetail, index: number) => (
-              <div key={location.locationId || index} className="bg-white shadow rounded-lg overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => toggleLocationExpanded(location.locationId)}
-                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50"
+              <div key={String(index + 1)} className="bg-white shadow rounded-lg overflow-hidden">
+                <div 
+                  className={`p-4 cursor-pointer flex justify-between items-center ${
+                    expandedLocations.includes(String(index)) ? 'bg-gray-50' : 'bg-white'
+                  }`}
+                  onClick={() => toggleAccordion(String(index))}
                 >
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900">
-                      {location.selectedLocationName || `Location ${index + 1}`}
-                    </h3>
-                    {location.streetAddress && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        {location.state}
-                      </p>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-lg font-medium text-gray-900">
+                      {t('location')} {index + 1}
+                    </span>
+                    {location.selectedLocationName && (
+                      <span className="text-sm text-gray-500">
+                        ({location.selectedLocationName})
+                      </span>
                     )}
                   </div>
-                  {expandedLocations.includes(location.locationId) ? (
-                    <ChevronUpIcon className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <ChevronDownIcon className="h-5 w-5 text-gray-400" />
-                  )}
-                </button>
-                {expandedLocations.includes(location.locationId) && (
-                  <div className="px-6 py-4 border-t border-gray-200 space-y-6">
+                  <ChevronDownIcon
+                    className={`w-5 h-5 text-gray-500 transform transition-transform ${
+                      expandedLocations.includes(String(index)) ? 'rotate-180' : ''
+                    }`}
+                  />
+                </div>
+                
+                <div className={`transition-all duration-200 ease-in-out ${
+                  expandedLocations.includes(String(index)) 
+                    ? 'max-h-none opacity-100' 
+                    : 'max-h-0 opacity-0 overflow-hidden'
+                }`}>
+                  <div className="p-4 space-y-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700">
                         Selecciona el nombre de la ubicación
@@ -751,16 +692,16 @@ export default function LocationDetails() {
                         }}
                       >
                         <option value="">Selecciona una ubicación...</option>
-                        {state.locations
-                          .filter((loc: Location) => loc.nameConfirmed && loc.name)
-                          .filter((loc: Location) => 
+                        {(formData.locations || [])
+                          .filter(loc => loc.name && loc.nameConfirmed)
+                          .filter(loc => 
                             !values.locationDetails.some(
-                              (detail: ExtendedLocationDetail, i: number) => 
+                              (detail, i) => 
                                 i !== index && 
                                 detail.selectedLocationName === loc.name
                             )
                           )
-                          .map((loc: Location) => (
+                          .map(loc => (
                             <option key={loc.name} value={loc.name}>
                               {loc.name}
                             </option>
@@ -848,8 +789,8 @@ export default function LocationDetails() {
                       </div>
                     </div>
 
-                    <div>
-                      <SectionTitle>Contact Phone Numbers</SectionTitle>
+                    <SectionTitle>Contact Phone Numbers</SectionTitle>
+                    <div className="space-y-4">
                       <p className="mt-1 mb-4 text-sm text-gray-500">
                         Add all phone numbers that customers can use to contact this location
                       </p>
@@ -886,151 +827,815 @@ export default function LocationDetails() {
                       </FieldArray>
                     </div>
 
-                    <div>
-                      <SectionTitle>Payment Methods</SectionTitle>
+                    <SectionTitle>Payment Methods</SectionTitle>
+                    <div className="mt-2 space-y-4">
                       <p className="mt-1 mb-4 text-sm text-gray-500">
                         Select all payment methods accepted at this location and specify any restrictions
                       </p>
-                      <div className="mt-2 space-y-4">
-                        {PAYMENT_METHODS.map(method => (
-                          <div key={method} className="space-y-2">
+                      {PAYMENT_METHODS.map(method => (
+                        <div key={method} className="space-y-2">
+                          <div className="flex items-center">
+                            <Field
+                              type="checkbox"
+                              name={`locationDetails.${index}.acceptedPaymentMethods`}
+                              value={method}
+                              checked={values.locationDetails[index].acceptedPaymentMethods.includes(method)}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                const currentMethods = [...values.locationDetails[index].acceptedPaymentMethods];
+                                if (e.target.checked) {
+                                  currentMethods.push(method);
+                                } else {
+                                  const idx = currentMethods.indexOf(method);
+                                  if (idx > -1) {
+                                    currentMethods.splice(idx, 1);
+                                  }
+                                }
+                                handleFieldChange(setFieldValue, `locationDetails.${index}.acceptedPaymentMethods`, currentMethods);
+                              }}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            />
+                            <label className="ml-2 text-sm text-gray-700">
+                              {method.replace('_', ' ')}
+                            </label>
+                          </div>
+                          {values.locationDetails[index].acceptedPaymentMethods.includes(method) && 
+                           (method === 'CREDIT_CARD' || method === 'DEBIT_CARD' || method === 'MOBILE_PAYMENT') && (
+                            <div className="ml-6">
+                              <Field
+                                type="text"
+                                name={`locationDetails.${index}.${method.toLowerCase().replace('_', '')}Exclusions`}
+                                placeholder={`Specify any ${method.toLowerCase().replace('_', ' ')} exclusions (e.g., 'No American Express')`}
+                                className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.${method.toLowerCase().replace('_', '')}Exclusions`, e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <SectionTitle>Phone Carrier Settings</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Select the phone carrier for this location's phone numbers
+                      </p>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Phone Carrier
+                        </label>
+                        <Field
+                          as="select"
+                          name={`locationDetails.${index}.phoneCarrier`}
+                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.phoneCarrier`, e.target.value)}
+                        >
+                          <option value="">Select a carrier...</option>
+                          {PHONE_CARRIERS.map(carrier => (
+                            <option key={carrier} value={carrier}>
+                              {carrier}
+                            </option>
+                          ))}
+                        </Field>
+                      </div>
+
+                      {values.locationDetails[index].phoneCarrier === 'OTHER' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Specify Other Carrier
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.otherPhoneCarrier`}
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            placeholder="Enter carrier name"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              handleFieldChange(setFieldValue, `locationDetails.${index}.otherPhoneCarrier`, e.target.value);
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {values.locationDetails[index].phoneCarrier && (
+                        <div className="mt-4 space-y-4 border border-gray-200 rounded-lg p-4">
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                Username
+                              </label>
+                              <Field
+                                type="text"
+                                name={`locationDetails.${index}.carrierCredentials.username`}
+                                className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                placeholder="Enter carrier username"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                  handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.username`, e.target.value);
+                                }}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                Password
+                              </label>
+                              <Field
+                                type="text"
+                                name={`locationDetails.${index}.carrierCredentials.password`}
+                                className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                placeholder="Enter carrier password"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                  handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.password`, e.target.value);
+                                }}
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                PIN
+                              </label>
+                              <Field
+                                type="text"
+                                name={`locationDetails.${index}.carrierCredentials.pin`}
+                                className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                placeholder="Enter carrier PIN"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                  handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.pin`, e.target.value);
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Transfer Rules (Optional)
+                            </label>
+                            <p className="mt-1 text-sm text-gray-500">
+                              By default, all calls will be transferred to the host. Use these rules only if you want to specify particular cases that should be handled differently. For example, if catering inquiries should go to a different number.
+                            </p>
+                            <FieldArray name={`locationDetails.${index}.transferRules`}>
+                              {({ push, remove }) => (
+                                <div className="space-y-2">
+                                  {values.locationDetails[index].transferRules.map((rule: TransferRule, ruleIndex: number) => (
+                                    <div key={ruleIndex} className="space-y-4 border border-gray-100 rounded p-4">
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                          Call Type
+                                        </label>
+                                        <Field
+                                          as="select"
+                                          name={`locationDetails.${index}.transferRules.${ruleIndex}.type`}
+                                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                                            handleFieldChange(setFieldValue, `locationDetails.${index}.transferRules.${ruleIndex}.type`, e.target.value);
+                                          }}
+                                        >
+                                          <option value="">Select call type...</option>
+                                          {CALL_TYPES.map(type => (
+                                            <option key={type.value} value={type.value}>
+                                              {type.label}
+                                            </option>
+                                          ))}
+                                        </Field>
+                                      </div>
+
+                                      {rule.type === 'other' && (
+                                        <div>
+                                          <label className="block text-sm font-medium text-gray-700">
+                                            Other Type Description
+                                          </label>
+                                          <Field
+                                            type="text"
+                                            name={`locationDetails.${index}.transferRules.${ruleIndex}.otherType`}
+                                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                            placeholder="Describe the call type"
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                              handleFieldChange(setFieldValue, `locationDetails.${index}.transferRules.${ruleIndex}.otherType`, e.target.value);
+                                            }}
+                                          />
+                                        </div>
+                                      )}
+
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                          Transfer Number
+                                        </label>
+                                        <Field
+                                          type="tel"
+                                          name={`locationDetails.${index}.transferRules.${ruleIndex}.number`}
+                                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                          placeholder="Enter phone number"
+                                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                            handleFieldChange(setFieldValue, `locationDetails.${index}.transferRules.${ruleIndex}.number`, e.target.value);
+                                          }}
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                          Description
+                                        </label>
+                                        <Field
+                                          type="text"
+                                          name={`locationDetails.${index}.transferRules.${ruleIndex}.description`}
+                                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                          placeholder="Add any additional notes"
+                                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                            handleFieldChange(setFieldValue, `locationDetails.${index}.transferRules.${ruleIndex}.description`, e.target.value);
+                                          }}
+                                        />
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => remove(ruleIndex)}
+                                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                                      >
+                                        Remove Rule
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => push({
+                                      type: '',
+                                      number: '',
+                                      description: '',
+                                      index: values.locationDetails[index].transferRules.length
+                                    })}
+                                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
+                                  >
+                                    Add Transfer Rule
+                                  </button>
+                                </div>
+                              )}
+                            </FieldArray>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Operating Hours</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Set the operating hours for this location. For each day, you can specify multiple time slots including service periods (lunch, dinner, etc.) and break/closed periods between services.
+                      </p>
+                      {DAYS_OF_WEEK.map((day) => (
+                        <div key={day} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center">
                               <Field
                                 type="checkbox"
-                                name={`locationDetails.${index}.acceptedPaymentMethods`}
-                                value={method}
-                                checked={values.locationDetails[index].acceptedPaymentMethods.includes(method)}
+                                name={`locationDetails.${index}.schedule.${day}.enabled`}
+                                checked={values.locationDetails[index].schedule[day].enabled}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                                  const currentMethods = [...values.locationDetails[index].acceptedPaymentMethods];
-                                  if (e.target.checked) {
-                                    currentMethods.push(method);
-                                  } else {
-                                    const idx = currentMethods.indexOf(method);
-                                    if (idx > -1) {
-                                      currentMethods.splice(idx, 1);
-                                    }
+                                  handleFieldChange(
+                                    setFieldValue,
+                                    `locationDetails.${index}.schedule.${day}.enabled`,
+                                    e.target.checked
+                                  );
+                                  
+                                  // Si se está habilitando el día, agregar un time slot por defecto
+                                  if (e.target.checked && values.locationDetails[index].schedule[day].timeSlots.length === 0) {
+                                    handleFieldChange(
+                                      setFieldValue,
+                                      `locationDetails.${index}.schedule.${day}.timeSlots`,
+                                      [{
+                                        start: '11:00',
+                                        end: '22:00',
+                                        type: 'all-day',
+                                        kitchenClosingTime: '21:30'
+                                      }]
+                                    );
                                   }
-                                  handleFieldChange(setFieldValue, `locationDetails.${index}.acceptedPaymentMethods`, currentMethods);
                                 }}
                                 className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                               />
-                              <label className="ml-2 text-sm text-gray-700">
-                                {method.replace('_', ' ')}
+                              <label className="ml-2 block text-sm font-medium text-gray-700 capitalize">
+                                {day}
                               </label>
                             </div>
-                            {values.locationDetails[index].acceptedPaymentMethods.includes(method) && 
-                             (method === 'CREDIT_CARD' || method === 'DEBIT_CARD' || method === 'MOBILE_PAYMENT') && (
-                              <div className="ml-6">
-                                <Field
-                                  type="text"
-                                  name={`locationDetails.${index}.${method.toLowerCase().replace('_', '')}Exclusions`}
-                                  placeholder={`Specify any ${method.toLowerCase().replace('_', ' ')} exclusions (e.g., 'No American Express')`}
-                                  className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.${method.toLowerCase().replace('_', '')}Exclusions`, e.target.value)}
-                                />
-                              </div>
-                            )}
                           </div>
-                        ))}
-                      </div>
+
+                          {values.locationDetails[index].schedule[day].enabled && (
+                            <div className="mt-4">
+                              <FieldArray name={`locationDetails.${index}.schedule.${day}.timeSlots`}>
+                                {({ push, remove }) => (
+                                  <div className="space-y-4">
+                                    {values.locationDetails[index].schedule[day].timeSlots.map((timeSlot: TimeSlot, timeSlotIndex: number) => (
+                                      <div key={timeSlotIndex} className="flex items-start space-x-4 border border-gray-100 rounded p-4">
+                                        <div className="flex-1 space-y-4">
+                                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                            <div>
+                                              <label className="block text-sm font-medium text-gray-700">
+                                                Opening Time
+                                              </label>
+                                              <Field
+                                                type="time"
+                                                name={`locationDetails.${index}.schedule.${day}.timeSlots.${timeSlotIndex}.start`}
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                                  handleFieldChange(
+                                                    setFieldValue,
+                                                    `locationDetails.${index}.schedule.${day}.timeSlots.${timeSlotIndex}.start`,
+                                                    e.target.value
+                                                  );
+                                                }}
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-sm font-medium text-gray-700">
+                                                Closing Time
+                                              </label>
+                                              <Field
+                                                type="time"
+                                                name={`locationDetails.${index}.schedule.${day}.timeSlots.${timeSlotIndex}.end`}
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                                  handleFieldChange(
+                                                    setFieldValue,
+                                                    `locationDetails.${index}.schedule.${day}.timeSlots.${timeSlotIndex}.end`,
+                                                    e.target.value
+                                                  );
+                                                }}
+                                              />
+                                            </div>
+                                            <div>
+                                              <label className="block text-sm font-medium text-gray-700">
+                                                Kitchen Closing Time
+                                              </label>
+                                              <Field
+                                                type="time"
+                                                name={`locationDetails.${index}.schedule.${day}.timeSlots.${timeSlotIndex}.kitchenClosingTime`}
+                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                                  handleFieldChange(
+                                                    setFieldValue,
+                                                    `locationDetails.${index}.schedule.${day}.timeSlots.${timeSlotIndex}.kitchenClosingTime`,
+                                                    e.target.value
+                                                  );
+                                                }}
+                                              />
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <label className="block text-sm font-medium text-gray-700">
+                                              Service Type
+                                            </label>
+                                            <Field
+                                              as="select"
+                                              name={`locationDetails.${index}.schedule.${day}.timeSlots.${timeSlotIndex}.type`}
+                                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                                                handleFieldChange(
+                                                  setFieldValue,
+                                                  `locationDetails.${index}.schedule.${day}.timeSlots.${timeSlotIndex}.type`,
+                                                  e.target.value
+                                                );
+                                              }}
+                                            >
+                                              <option value="">Select service type...</option>
+                                              <option value="lunch">Lunch</option>
+                                              <option value="dinner">Dinner</option>
+                                              <option value="brunch">Brunch</option>
+                                              <option value="all-day">All Day</option>
+                                              <option value="break">Break/Closed Period</option>
+                                            </Field>
+                                          </div>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => remove(timeSlotIndex)}
+                                          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => push({
+                                        start: '',
+                                        end: '',
+                                        type: '',
+                                        kitchenClosingTime: null
+                                      })}
+                                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
+                                    >
+                                      Add Time Slot
+                                    </button>
+                                  </div>
+                                )}
+                              </FieldArray>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
 
-                    <div>
-                      <SectionTitle>Corkage Policy</SectionTitle>
+                    <SectionTitle>Wait Times</SectionTitle>
+                    <div className="space-y-4">
                       <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Specify if your establishment allows customers to bring their own wine and any associated fees
+                        Set the expected wait times for each time slot during your operating days. This helps customers plan their visits better.
                       </p>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-4">
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name={`locationDetails.${index}.corkage.allowed`}
-                              checked={values.locationDetails[index].corkage.allowed === true}
-                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.allowed`, true)}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">Yes</span>
-                          </label>
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name={`locationDetails.${index}.corkage.allowed`}
-                              checked={values.locationDetails[index].corkage.allowed === false}
-                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.allowed`, false)}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">No</span>
-                          </label>
-                        </div>
+                      {DAYS_OF_WEEK.map((day) => (
+                        values.locationDetails[index].schedule[day].enabled && (
+                          <div key={day} className="border border-gray-200 rounded-lg p-4">
+                            <h4 className="font-medium text-gray-900 capitalize mb-4">{day}</h4>
+                            <div className="space-y-4">
+                              {TIME_SLOTS.map((timeSlot) => (
+                                <div key={timeSlot.id} className="space-y-2">
+                                  <label className="block text-sm font-medium text-gray-700">
+                                    {timeSlot.label}
+                                  </label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {WAIT_TIME_RANGES.map((range) => (
+                                      <button
+                                        key={range.value}
+                                        type="button"
+                                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                                          values.locationDetails[index].waitTimes[day]?.[timeSlot.id] === range.value
+                                            ? range.color + ' ring-2 ring-indigo-500'
+                                            : range.color
+                                        }`}
+                                        onClick={() => {
+                                          const newWaitTimes = {
+                                            ...values.locationDetails[index].waitTimes,
+                                            [day]: {
+                                              ...values.locationDetails[index].waitTimes[day],
+                                              [timeSlot.id]: range.value
+                                            }
+                                          };
+                                          handleFieldChange(setFieldValue, `locationDetails.${index}.waitTimes`, newWaitTimes);
+                                        }}
+                                      >
+                                        {range.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      ))}
+                    </div>
 
-                        {values.locationDetails[index].corkage.allowed && (
+                    <SectionTitle>Reservation Settings</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        ¿Aceptan reservas en esta locación?
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.reservationSettings.acceptsReservations`}
+                            value={true}
+                            checked={values.locationDetails[index].reservationSettings.acceptsReservations === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.acceptsReservations`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Yes</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.reservationSettings.acceptsReservations`}
+                            value={false}
+                            checked={values.locationDetails[index].reservationSettings.acceptsReservations === false}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.acceptsReservations`, false)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">No</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].reservationSettings.acceptsReservations && (
+                        <div className="mt-4 space-y-4 border border-gray-200 rounded-lg p-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700">
-                              Corkage Fee
+                              Reservation Platform
+                            </label>
+                            <Field
+                              as="select"
+                              name={`locationDetails.${index}.reservationSettings.platform`}
+                              className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.platform`, e.target.value)}
+                            >
+                              <option value="">Select reservation platform...</option>
+                              {RESERVATION_PLATFORMS.map(platform => (
+                                <option key={platform} value={platform}>
+                                  {platform}
+                                </option>
+                              ))}
+                            </Field>
+                          </div>
+
+                          {values.locationDetails[index].reservationSettings.platform && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                Link de Reservas
+                              </label>
+                              <p className="mt-1 text-sm text-gray-500">
+                                Ingresa el link exacto de reservas para esta ubicación. Este link será enviado por el asistente AI a los clientes que soliciten hacer una reserva.
+                              </p>
+                              <Field
+                                type="url"
+                                name={`locationDetails.${index}.reservationSettings.reservationLink`}
+                                placeholder="https://..."
+                                className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.reservationLink`, e.target.value)}
+                              />
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Grace Period (minutes)
                             </label>
                             <p className="mt-1 text-sm text-gray-500">
-                              Specify the fee charged per bottle
+                              How many minutes after the reservation time the table will be held before being released
                             </p>
                             <Field
-                              type="text"
-                              name={`locationDetails.${index}.corkage.fee`}
-                              placeholder="e.g., $25 per bottle"
-                              className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.fee`, e.target.value)}
+                              type="number"
+                              min="0"
+                              name={`locationDetails.${index}.reservationSettings.gracePeriod`}
+                              className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.gracePeriod`, parseInt(e.target.value))}
+                              placeholder="e.g., 15"
                             />
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div>
-                      <SectionTitle>Special Discounts and Happy Hours</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Configure any ongoing specials, discounts, or Happy Hours for specific groups
-                      </p>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-4">
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name={`locationDetails.${index}.specialDiscounts.hasDiscounts`}
-                              checked={values.locationDetails[index].specialDiscounts.hasDiscounts === true}
-                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.hasDiscounts`, true)}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">Yes</span>
-                          </label>
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name={`locationDetails.${index}.specialDiscounts.hasDiscounts`}
-                              checked={values.locationDetails[index].specialDiscounts.hasDiscounts === false}
-                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.hasDiscounts`, false)}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">No</span>
-                          </label>
-                        </div>
+                    <SectionTitle>Parking Information</SectionTitle>
+                    <div className="space-y-4">
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.parking.hasParking`}
+                            value={true}
+                            checked={values.locationDetails[index].parking.hasParking === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.hasParking`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Has Parking</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.parking.hasParking`}
+                            value={false}
+                            checked={values.locationDetails[index].parking.hasParking === false}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.hasParking`, false)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">No Parking</span>
+                        </label>
+                      </div>
 
-                        {values.locationDetails[index].specialDiscounts.hasDiscounts && (
+                      {values.locationDetails[index].parking.hasParking && (
+                        <div className="mt-4 space-y-4 border border-gray-200 rounded-lg p-4">
                           <div>
-                            <FieldArray name={`locationDetails.${index}.specialDiscounts.details`}>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Parking Type
+                            </label>
+                            <div className="mt-2 space-x-4">
+                              <label className="inline-flex items-center">
+                                <Field
+                                  type="radio"
+                                  name={`locationDetails.${index}.parking.parkingType`}
+                                  value="free"
+                                  checked={values.locationDetails[index].parking.parkingType === 'free'}
+                                  onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.parkingType`, 'free')}
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">Free</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <Field
+                                  type="radio"
+                                  name={`locationDetails.${index}.parking.parkingType`}
+                                  value="paid"
+                                  checked={values.locationDetails[index].parking.parkingType === 'paid'}
+                                  onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.parkingType`, 'paid')}
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">Paid</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          {values.locationDetails[index].parking.parkingType === 'paid' && (
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                Pricing Details
+                              </label>
+                              <Field
+                                type="text"
+                                name={`locationDetails.${index}.parking.pricingDetails`}
+                                placeholder="e.g., $5 per hour, $20 maximum"
+                                className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.pricingDetails`, e.target.value)}
+                              />
+                            </div>
+                          )}
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Parking Location
+                            </label>
+                            <Field
+                              type="text"
+                              name={`locationDetails.${index}.parking.location`}
+                              placeholder="e.g., Behind the restaurant, Street parking available"
+                              className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.location`, e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Corkage Policy</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify if customers are allowed to bring their own wine and any associated corkage fees
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.corkage.allowed`}
+                            value={true}
+                            checked={values.locationDetails[index].corkage.allowed === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.allowed`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Allowed</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.corkage.allowed`}
+                            value={false}
+                            checked={values.locationDetails[index].corkage.allowed === false}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.allowed`, false)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Not Allowed</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].corkage.allowed && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Corkage Fee
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.corkage.fee`}
+                            placeholder="e.g., $25 per bottle"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.corkage.fee`, e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Special Discounts & Happy Hours</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify any special discounts, happy hours, or promotional offers available at this location
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.specialDiscounts.hasDiscounts`}
+                            value={true}
+                            checked={values.locationDetails[index].specialDiscounts.hasDiscounts === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.hasDiscounts`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Yes, we offer special discounts</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.specialDiscounts.hasDiscounts`}
+                            value={false}
+                            checked={values.locationDetails[index].specialDiscounts.hasDiscounts === false}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.hasDiscounts`, false)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">No special discounts</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].specialDiscounts.hasDiscounts && (
+                        <div>
+                          <FieldArray name={`locationDetails.${index}.specialDiscounts.details`}>
+                            {({ push, remove }) => (
+                              <div className="space-y-2">
+                                {values.locationDetails[index].specialDiscounts.details.map((detail: string, detailIndex: number) => (
+                                  <div key={detailIndex} className="flex gap-2">
+                                    <Field
+                                      type="text"
+                                      name={`locationDetails.${index}.specialDiscounts.details.${detailIndex}`}
+                                      placeholder="e.g., Happy Hour Mon-Fri 4-7pm: 50% off appetizers"
+                                      className="flex-1 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.details.${detailIndex}`, e.target.value)}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => remove(detailIndex)}
+                                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => push('')}
+                                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
+                                >
+                                  Add Discount/Happy Hour
+                                </button>
+                              </div>
+                            )}
+                          </FieldArray>
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Birthday Celebrations</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify your policy regarding birthday celebrations and any special arrangements available
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.birthdayCelebrations.allowed`}
+                            value={true}
+                            checked={values.locationDetails[index].birthdayCelebrations.allowed === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.birthdayCelebrations.allowed`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Birthday celebrations allowed</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.birthdayCelebrations.allowed`}
+                            value={false}
+                            checked={values.locationDetails[index].birthdayCelebrations.allowed === false}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.birthdayCelebrations.allowed`, false)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Not allowed</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].birthdayCelebrations.allowed && (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Celebration Details
+                            </label>
+                            <Field
+                              as="textarea"
+                              name={`locationDetails.${index}.birthdayCelebrations.details`}
+                              placeholder="e.g., Complimentary dessert, special song performance, etc."
+                              className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.birthdayCelebrations.details`, e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Restrictions
+                            </label>
+                            <FieldArray name={`locationDetails.${index}.birthdayCelebrations.restrictions`}>
                               {({ push, remove }) => (
                                 <div className="space-y-2">
-                                  {values.locationDetails[index].specialDiscounts.details?.map((detail: string, detailIndex: number) => (
-                                    <div key={detailIndex} className="flex gap-2">
+                                  {values.locationDetails[index].birthdayCelebrations.restrictions.map((restriction: string, restrictionIndex: number) => (
+                                    <div key={restrictionIndex} className="flex gap-2">
                                       <Field
                                         type="text"
-                                        name={`locationDetails.${index}.specialDiscounts.details.${detailIndex}`}
-                                        placeholder="e.g., 10% off for military, Happy Hour 4-6 PM"
+                                        name={`locationDetails.${index}.birthdayCelebrations.restrictions.${restrictionIndex}`}
+                                        placeholder="e.g., Must book at least 24 hours in advance"
                                         className="flex-1 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.specialDiscounts.details.${detailIndex}`, e.target.value)}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.birthdayCelebrations.restrictions.${restrictionIndex}`, e.target.value)}
                                       />
                                       <button
                                         type="button"
-                                        onClick={() => remove(detailIndex)}
-                                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700"
+                                        onClick={() => remove(restrictionIndex)}
+                                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
                                       >
                                         Remove
                                       </button>
@@ -1041,340 +1646,502 @@ export default function LocationDetails() {
                                     onClick={() => push('')}
                                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
                                   >
-                                    Add Discount/Special
+                                    Add Restriction
                                   </button>
                                 </div>
                               )}
                             </FieldArray>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div>
-                      <SectionTitle>Phone Service Provider</SectionTitle>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Select your phone service provider to configure call forwarding settings
+                    <SectionTitle>Dress Code</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify if your location has a dress code policy and any exceptions
                       </p>
-                      <Field
-                        as="select"
-                        name={`locationDetails.${index}.phoneCarrier`}
-                        className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.phoneCarrier`, e.target.value)}
-                      >
-                        <option value="">{t('selectPhoneCarrier')}</option>
-                        {PHONE_CARRIERS.map(carrier => (
-                          <option key={carrier} value={carrier}>
-                            {carrier.replace('_', ' ')}
-                          </option>
-                        ))}
-                        <option value="other">{t('other')}</option>
-                      </Field>
-                    </div>
-
-                    {values.locationDetails[index].phoneCarrier === 'other' && (
-                      <div>
-                        <label htmlFor={`locationDetails.${index}.otherPhoneCarrier`} className="block text-sm font-medium text-gray-700">
-                          {t('otherPhoneCarrier')}
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.dressCode.hasDressCode`}
+                            value={true}
+                            checked={values.locationDetails[index].dressCode.hasDressCode === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.dressCode.hasDressCode`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Has dress code</span>
                         </label>
-                        <p className="mt-1 text-sm text-gray-500">
-                          Please specify your phone service provider's name
-                        </p>
-                        <Field
-                          type="text"
-                          name={`locationDetails.${index}.otherPhoneCarrier`}
-                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.otherPhoneCarrier`, e.target.value)}
-                        />
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.dressCode.hasDressCode`}
+                            value={false}
+                            checked={values.locationDetails[index].dressCode.hasDressCode === false}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.dressCode.hasDressCode`, false)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">No dress code</span>
+                        </label>
                       </div>
-                    )}
 
-                    {values.locationDetails[index].phoneCarrier && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          {t('carrierCredentials')}
-                        </label>
-                        <p className="mt-1 text-sm text-gray-500">
-                          Enter your phone service provider credentials to enable automatic call forwarding configuration
-                        </p>
-                        <div className="mt-2 space-y-4">
+                      {values.locationDetails[index].dressCode.hasDressCode && (
+                        <div className="space-y-4">
                           <div>
-                            <label htmlFor={`locationDetails.${index}.carrierCredentials.username`} className="block text-sm font-medium text-gray-700">
-                              Account Username or Email
+                            <label className="block text-sm font-medium text-gray-700">
+                              Dress Code Details
                             </label>
                             <Field
-                              type="text"
-                              name={`locationDetails.${index}.carrierCredentials.username`}
-                              placeholder="Enter your carrier account username"
-                              className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.username`, e.target.value)}
+                              as="textarea"
+                              name={`locationDetails.${index}.dressCode.details`}
+                              placeholder="e.g., Business casual, no shorts or flip-flops"
+                              className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.dressCode.details`, e.target.value)}
                             />
                           </div>
+
                           <div>
-                            <label htmlFor={`locationDetails.${index}.carrierCredentials.password`} className="block text-sm font-medium text-gray-700">
-                              Account Password
+                            <label className="block text-sm font-medium text-gray-700">
+                              Exceptions
                             </label>
-                            <div className="mt-1">
-                              <Field
-                                type="text"
-                                name={`locationDetails.${index}.carrierCredentials.password`}
-                                placeholder="Enter your carrier account password"
-                                className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.password`, e.target.value)}
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label htmlFor={`locationDetails.${index}.carrierCredentials.pin`} className="block text-sm font-medium text-gray-700">
-                              Account PIN or Security Code
-                            </label>
-                            <p className="mt-1 text-sm text-gray-500">
-                              This is typically a 4-digit code used for account security
-                            </p>
-                            <Field
-                              type="text"
-                              name={`locationDetails.${index}.carrierCredentials.pin`}
-                              placeholder="Enter your account PIN"
-                              className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.carrierCredentials.pin`, e.target.value)}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <SectionTitle>Opening and Closing Hours</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Configure your business hours for each day of the week. You can set different time slots for regular hours, breaks, or special hours. Days without configured hours will be marked as closed.
-                      </p>
-                      <WeeklySchedule
-                        index={index}
-                      />
-                    </div>
-
-                    <div>
-                      <SectionTitle>Call Transfer Configuration</SectionTitle>
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        ¿Querés configuraciones avanzadas para el Human Transfer?
-                      </p>
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-4">
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name={`locationDetails.${index}.defaultTransferToHost`}
-                              checked={values.locationDetails[index].defaultTransferToHost === true}
-                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.defaultTransferToHost`, true)}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">Yes</span>
-                          </label>
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name={`locationDetails.${index}.defaultTransferToHost`}
-                              checked={values.locationDetails[index].defaultTransferToHost === false}
-                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.defaultTransferToHost`, false)}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">No</span>
-                          </label>
-                        </div>
-
-                        {values.locationDetails[index].defaultTransferToHost === false && (
-                          <div className="mt-4 space-y-4 border border-gray-200 rounded-lg p-4">
-                            <SectionTitle>Advanced Call Transfer Rules</SectionTitle>
-                            <p className="mt-1 mb-4 text-sm text-gray-500">
-                              Configure specific phone numbers for different types of inquiries
-                            </p>
-                            <FieldArray name={`locationDetails.${index}.transferRules`}>
+                            <FieldArray name={`locationDetails.${index}.dressCode.exceptions`}>
                               {({ push, remove }) => (
-                                <div className="space-y-4">
-                                  {values.locationDetails[index].transferRules.map((rule: TransferRule, ruleIndex: number) => (
-                                    <div key={ruleIndex} className="grid grid-cols-1 gap-4 p-4 border border-gray-200 rounded-md">
-                                      <div>
-                                        <label className="block text-sm font-medium text-gray-700">Type of Inquiry</label>
-                                        <Field
-                                          as="select"
-                                          name={`locationDetails.${index}.transferRules.${ruleIndex}.type`}
-                                          className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.transferRules.${ruleIndex}.type`, e.target.value)}
-                                        >
-                                          <option value="">Select type...</option>
-                                          {CALL_TYPES.map(type => (
-                                            <option key={type.value} value={type.value}>{type.label}</option>
-                                          ))}
-                                        </Field>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-medium text-gray-700">Transfer Number</label>
-                                        <Field
-                                          type="tel"
-                                          name={`locationDetails.${index}.transferRules.${ruleIndex}.number`}
-                                          placeholder="Enter phone number for this type of inquiry"
-                                          className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.transferRules.${ruleIndex}.number`, e.target.value)}
-                                        />
-                                      </div>
+                                <div className="space-y-2">
+                                  {values.locationDetails[index].dressCode.exceptions.map((exception: string, exceptionIndex: number) => (
+                                    <div key={exceptionIndex} className="flex gap-2">
+                                      <Field
+                                        type="text"
+                                        name={`locationDetails.${index}.dressCode.exceptions.${exceptionIndex}`}
+                                        placeholder="e.g., Dress code relaxed for Sunday brunch"
+                                        className="flex-1 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.dressCode.exceptions.${exceptionIndex}`, e.target.value)}
+                                      />
                                       <button
                                         type="button"
-                                        onClick={() => remove(ruleIndex)}
-                                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700"
+                                        onClick={() => remove(exceptionIndex)}
+                                        className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
                                       >
-                                        Remove Rule
+                                        Remove
                                       </button>
                                     </div>
                                   ))}
                                   <button
                                     type="button"
-                                    onClick={() => push({ type: '', number: '' })}
+                                    onClick={() => push('')}
                                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
                                   >
-                                    Add Transfer Rule
+                                    Add Exception
                                   </button>
                                 </div>
                               )}
                             </FieldArray>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div>
-                      <SectionTitle>Reservation Settings</SectionTitle>
+                    <SectionTitle>Age Verification</SectionTitle>
+                    <div className="space-y-4">
                       <p className="mt-1 mb-4 text-sm text-gray-500">
-                        ¿Aceptan reservas en esta locación?
+                        Select which forms of identification are accepted for age verification
+                      </p>
+                      <div className="space-y-2">
+                        {AGE_VERIFICATION_DOCUMENTS.map(doc => (
+                          <div key={doc} className="flex items-center">
+                            <Field
+                              type="checkbox"
+                              name={`locationDetails.${index}.ageVerification.acceptedDocuments`}
+                              value={doc}
+                              checked={values.locationDetails[index].ageVerification.acceptedDocuments.includes(doc)}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                const currentDocs = [...values.locationDetails[index].ageVerification.acceptedDocuments];
+                                if (e.target.checked) {
+                                  currentDocs.push(doc);
+                                } else {
+                                  const idx = currentDocs.indexOf(doc);
+                                  if (idx > -1) {
+                                    currentDocs.splice(idx, 1);
+                                  }
+                                }
+                                handleFieldChange(setFieldValue, `locationDetails.${index}.ageVerification.acceptedDocuments`, currentDocs);
+                              }}
+                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            />
+                            <label className="ml-2 text-sm text-gray-700">
+                              {doc.replace(/_/g, ' ')}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+
+                      {values.locationDetails[index].ageVerification.acceptedDocuments.includes('OTHER') && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Other Accepted Documents
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.ageVerification.otherDocuments`}
+                            placeholder="Specify other accepted forms of ID"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.ageVerification.otherDocuments`, e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Smoking Area</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify if your location has a designated smoking area
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.smokingArea.hasSmokingArea`}
+                            value={true}
+                            checked={values.locationDetails[index].smokingArea.hasSmokingArea === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.smokingArea.hasSmokingArea`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Has smoking area</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.smokingArea.hasSmokingArea`}
+                            value={false}
+                            checked={values.locationDetails[index].smokingArea.hasSmokingArea === false}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.smokingArea.hasSmokingArea`, false)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">No smoking allowed</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].smokingArea.hasSmokingArea && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Smoking Area Details
+                          </label>
+                          <Field
+                            as="textarea"
+                            name={`locationDetails.${index}.smokingArea.details`}
+                            placeholder="e.g., Outdoor patio with heaters, available until 10 PM"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.smokingArea.details`, e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Brunch Menu</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify if your location offers a brunch menu. We appreciate JPG format files, but PDF is also acceptable. You can also provide a link to your brunch menu if it's available on your website.
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.brunchMenu.hasBrunchMenu`}
+                            value={true}
+                            checked={values.locationDetails[index].brunchMenu.hasBrunchMenu === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.brunchMenu.hasBrunchMenu`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Has brunch menu</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="radio"
+                            name={`locationDetails.${index}.brunchMenu.hasBrunchMenu`}
+                            value={false}
+                            checked={values.locationDetails[index].brunchMenu.hasBrunchMenu === false}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.brunchMenu.hasBrunchMenu`, false)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">No brunch menu</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].brunchMenu.hasBrunchMenu && (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Brunch Schedule
+                            </label>
+                            <Field
+                              as="textarea"
+                              name={`locationDetails.${index}.brunchMenu.schedule`}
+                              placeholder="e.g., Saturdays and Sundays from 10 AM to 3 PM"
+                              className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.brunchMenu.schedule`, e.target.value)}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Brunch Menu File
+                            </label>
+                            <p className="mt-1 text-sm text-gray-500">
+                              Upload your brunch menu (JPG preferred, PDF accepted)
+                            </p>
+                            <input
+                              type="file"
+                              accept=".jpg,.jpeg,.pdf"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleFieldChange(setFieldValue, `locationDetails.${index}.brunchMenu.menuFile`, file);
+                                }
+                              }}
+                              className="mt-2 block w-full text-sm text-gray-500
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded-md file:border-0
+                                file:text-sm file:font-medium
+                                file:bg-indigo-50 file:text-indigo-700
+                                hover:file:bg-indigo-100"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Brunch Menu URL
+                            </label>
+                            <p className="mt-1 text-sm text-gray-500">
+                              If your brunch menu is available online, provide the direct link
+                            </p>
+                            <Field
+                              type="url"
+                              name={`locationDetails.${index}.brunchMenu.menuUrl`}
+                              placeholder="https://..."
+                              className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.brunchMenu.menuUrl`, e.target.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Pickup Settings</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Configure which platforms you use for pickup/takeout orders and set your preferred platform for AI promotion
                       </p>
                       <div className="space-y-4">
-                        <div className="flex items-center space-x-4">
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name={`locationDetails.${index}.reservationSettings.acceptsReservations`}
-                              checked={values.locationDetails[index].reservationSettings.acceptsReservations === true}
-                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.acceptsReservations`, true)}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">Yes</span>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Pickup/Takeout Platforms
                           </label>
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name={`locationDetails.${index}.reservationSettings.acceptsReservations`}
-                              checked={values.locationDetails[index].reservationSettings.acceptsReservations === false}
-                              onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.acceptsReservations`, false)}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                            />
-                            <span className="ml-2 text-sm text-gray-700">No</span>
-                          </label>
+                          <p className="mt-1 text-sm text-gray-500">
+                            Select all platforms where customers can place pickup/takeout orders
+                          </p>
+                          <div className="mt-2 space-y-2">
+                            {PICKUP_DELIVERY_PLATFORMS.map(platform => (
+                              <div key={platform} className="flex items-center">
+                                <Field
+                                  type="checkbox"
+                                  name={`locationDetails.${index}.pickupSettings.platforms`}
+                                  value={platform}
+                                  checked={values.locationDetails[index].pickupSettings.platforms.includes(platform)}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                    const currentPlatforms = [...values.locationDetails[index].pickupSettings.platforms];
+                                    if (e.target.checked) {
+                                      currentPlatforms.push(platform);
+                                    } else {
+                                      const idx = currentPlatforms.indexOf(platform);
+                                      if (idx > -1) {
+                                        currentPlatforms.splice(idx, 1);
+                                      }
+                                    }
+                                    handleFieldChange(setFieldValue, `locationDetails.${index}.pickupSettings.platforms`, currentPlatforms);
+                                  }}
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                />
+                                <label className="ml-2 text-sm text-gray-700">
+                                  {platform.replace(/_/g, ' ')}
+                                </label>
+                              </div>
+                            ))}
+                            {values.locationDetails[index].pickupSettings.platforms.includes('OTHER') && (
+                              <div className="mt-4 pl-6 border-l-2 border-indigo-100">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Especifica la otra plataforma
+                                </label>
+                                <p className="text-sm text-gray-500 mb-2">
+                                  Indica el nombre de la plataforma que utilizas para pedidos de pickup
+                                </p>
+                                <Field
+                                  type="text"
+                                  name={`locationDetails.${index}.pickupSettings.otherPlatform`}
+                                  placeholder="Ej: Sistema propio de pedidos"
+                                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3"
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.pickupSettings.otherPlatform`, e.target.value)}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
 
-                        {values.locationDetails[index].reservationSettings.acceptsReservations === true && (
-                          <div className="mt-4 space-y-4 border border-gray-200 rounded-lg p-4">
+                        {values.locationDetails[index].pickupSettings.platforms.length > 0 && (
+                          <>
                             <div>
                               <label className="block text-sm font-medium text-gray-700">
-                                Reservation Platform
+                                Preferred Platform
                               </label>
+                              <p className="mt-1 text-sm text-gray-500">
+                                Select your preferred platform for pickup orders. This will be promoted first by the AI.
+                              </p>
                               <Field
                                 as="select"
-                                name={`locationDetails.${index}.reservationSettings.platform`}
-                                className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.platform`, e.target.value)}
+                                name={`locationDetails.${index}.pickupSettings.preferredPlatform`}
+                                className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.pickupSettings.preferredPlatform`, e.target.value)}
                               >
-                                <option value="">Select reservation platform...</option>
-                                {RESERVATION_PLATFORMS.map(platform => (
+                                <option value="">Select preferred platform...</option>
+                                {values.locationDetails[index].pickupSettings.platforms.map(platform => (
                                   <option key={platform} value={platform}>
-                                    {platform}
+                                    {platform.replace(/_/g, ' ')}
                                   </option>
                                 ))}
                               </Field>
                             </div>
 
-                            {values.locationDetails[index].reservationSettings.platform && (
+                            {values.locationDetails[index].pickupSettings.preferredPlatform && (
                               <div>
                                 <label className="block text-sm font-medium text-gray-700">
-                                  Link de Reservas
+                                  Preferred Platform Link
                                 </label>
                                 <p className="mt-1 text-sm text-gray-500">
-                                  Ingresa el link exacto de reservas para esta ubicación. Este link será enviado por el asistente AI a los clientes que soliciten hacer una reserva.
+                                  Enter the direct link to your restaurant on the preferred platform
                                 </p>
                                 <Field
                                   type="url"
-                                  name={`locationDetails.${index}.reservationSettings.reservationLink`}
+                                  name={`locationDetails.${index}.pickupSettings.preferredPlatformLink`}
                                   placeholder="https://..."
-                                  className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.reservationLink`, e.target.value)}
+                                  className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.pickupSettings.preferredPlatformLink`, e.target.value)}
                                 />
                               </div>
                             )}
+                          </>
+                        )}
+                      </div>
+                    </div>
 
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Maximum Advance Reservation Time
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                How far in advance customers can make reservations
-                              </p>
-                              <div className="mt-1 flex gap-2">
+                    <SectionTitle>Delivery Settings</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Configure which platforms you use for delivery orders and set your preferred platform for AI promotion
+                      </p>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Delivery Platforms
+                          </label>
+                          <p className="mt-1 text-sm text-gray-500">
+                            Select all platforms where customers can place delivery orders
+                          </p>
+                          <div className="mt-2 space-y-2">
+                            {PICKUP_DELIVERY_PLATFORMS.map(platform => (
+                              <div key={platform} className="flex items-center">
                                 <Field
-                                  type="number"
-                                  name={`locationDetails.${index}.reservationSettings.maxAdvanceTime`}
-                                  min="1"
-                                  className="block w-32 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.maxAdvanceTime`, e.target.value)}
+                                  type="checkbox"
+                                  name={`locationDetails.${index}.deliverySettings.platforms`}
+                                  value={platform}
+                                  checked={values.locationDetails[index].deliverySettings.platforms.includes(platform)}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                    const currentPlatforms = [...values.locationDetails[index].deliverySettings.platforms];
+                                    if (e.target.checked) {
+                                      currentPlatforms.push(platform);
+                                    } else {
+                                      const idx = currentPlatforms.indexOf(platform);
+                                      if (idx > -1) {
+                                        currentPlatforms.splice(idx, 1);
+                                      }
+                                    }
+                                    handleFieldChange(setFieldValue, `locationDetails.${index}.deliverySettings.platforms`, currentPlatforms);
+                                  }}
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                                 />
-                                <Field
-                                  as="select"
-                                  name={`locationDetails.${index}.reservationSettings.maxAdvanceTimeUnit`}
-                                  className="block w-32 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.maxAdvanceTimeUnit`, e.target.value)}
-                                >
-                                  <option value="days">Days</option>
-                                  <option value="weeks">Weeks</option>
-                                </Field>
+                                <label className="ml-2 text-sm text-gray-700">
+                                  {platform.replace(/_/g, ' ')}
+                                </label>
                               </div>
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Maximum Party Size
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                Maximum number of guests allowed per booking before requiring human transfer
-                              </p>
-                              <Field
-                                type="number"
-                                name={`locationDetails.${index}.reservationSettings.maxPartySize`}
-                                className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.maxPartySize`, e.target.value)}
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700">
-                                Grace Period (minutes)
-                              </label>
-                              <p className="mt-1 text-sm text-gray-500">
-                                How many minutes after the reservation time the table will be held before being released
-                              </p>
-                              <Field
-                                type="number"
-                                min="0"
-                                name={`locationDetails.${index}.reservationSettings.gracePeriod`}
-                                className="mt-1 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.reservationSettings.gracePeriod`, parseInt(e.target.value))}
-                                placeholder="e.g., 15"
-                              />
-                            </div>
+                            ))}
+                            {values.locationDetails[index].deliverySettings.platforms.includes('OTHER') && (
+                              <div className="mt-4 pl-6 border-l-2 border-indigo-100">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Especifica la otra plataforma
+                                </label>
+                                <p className="text-sm text-gray-500 mb-2">
+                                  Indica el nombre de la plataforma que utilizas para pedidos de delivery
+                                </p>
+                                <Field
+                                  type="text"
+                                  name={`locationDetails.${index}.deliverySettings.otherPlatform`}
+                                  placeholder="Ej: Sistema propio de delivery"
+                                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3"
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.deliverySettings.otherPlatform`, e.target.value)}
+                                />
+                              </div>
+                            )}
                           </div>
+                        </div>
+
+                        {values.locationDetails[index].deliverySettings.platforms.length > 0 && (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
+                                Preferred Platform
+                              </label>
+                              <p className="mt-1 text-sm text-gray-500">
+                                Select your preferred platform for delivery orders. This will be promoted first by the AI.
+                              </p>
+                              <Field
+                                as="select"
+                                name={`locationDetails.${index}.deliverySettings.preferredPlatform`}
+                                className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.deliverySettings.preferredPlatform`, e.target.value)}
+                              >
+                                <option value="">Select preferred platform...</option>
+                                {values.locationDetails[index].deliverySettings.platforms.map(platform => (
+                                  <option key={platform} value={platform}>
+                                    {platform.replace(/_/g, ' ')}
+                                  </option>
+                                ))}
+                              </Field>
+                            </div>
+
+                            {values.locationDetails[index].deliverySettings.preferredPlatform && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                  Preferred Platform Link
+                                </label>
+                                <p className="mt-1 text-sm text-gray-500">
+                                  Enter the direct link to your restaurant on the preferred platform
+                                </p>
+                                <Field
+                                  type="url"
+                                  name={`locationDetails.${index}.deliverySettings.preferredPlatformLink`}
+                                  placeholder="https://..."
+                                  className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.deliverySettings.preferredPlatformLink`, e.target.value)}
+                                />
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             ))}
+
             <div className="flex justify-between">
               <button
                 type="button"
@@ -1405,5 +2172,7 @@ export default function LocationDetails() {
         )}
       </Formik>
     </div>
-  )
+  );
 }
+
+export default LocationDetails;
