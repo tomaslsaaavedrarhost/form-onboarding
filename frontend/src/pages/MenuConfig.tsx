@@ -17,7 +17,7 @@ const validationSchema = Yup.object().shape({
   menuGroups: Yup.array().of(
     Yup.object().shape({
       name: Yup.string().required('El nombre del grupo es requerido'),
-      locations: Yup.array().of(Yup.string()).required(),
+      locations: Yup.array().of(Yup.string()).required('Las ubicaciones son requeridas'),
       regularMenu: Yup.mixed().nullable(),
       regularMenuUrl: Yup.string().url('Debe ser una URL válida').required('La URL del menú regular es requerida'),
       hasDietaryMenu: Yup.boolean(),

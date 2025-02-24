@@ -19,9 +19,9 @@ export interface MenuGroup {
   hasVeganMenu: boolean
   veganMenu: File | null
   veganMenuUrl: string
+  hasOtherMenus: boolean
   otherMenus: File[]
   otherMenuUrls: string[]
-  hasOtherMenus: boolean
   sharedDishes: string
   sharedDrinks: string
   popularAppetizers: string
