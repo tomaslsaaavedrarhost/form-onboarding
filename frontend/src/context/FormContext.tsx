@@ -27,6 +27,7 @@ export interface MenuGroup {
   popularDesserts: string
   popularAlcoholicDrinks: string
   popularNonAlcoholicDrinks: string
+  locations?: string[] // Optional property for backward compatibility
 }
 
 interface MenuFile {

@@ -101,7 +101,7 @@ export default function TipsPolicy() {
     })),
     groupPolicies: state.menuGroups.map(group => ({
       groupId: group.name,
-      locations: group.locations,
+      locations: group.locations || [],
       hasTips: state.tipsPolicy?.groupPolicies?.[group.name]?.hasTips || 'yes',
       tipDetails: state.tipsPolicy?.groupPolicies?.[group.name]?.tipDetails || '',
       hasServiceCharge: state.tipsPolicy?.groupPolicies?.[group.name]?.hasServiceCharge || false,
@@ -204,196 +204,148 @@ export default function TipsPolicy() {
               }}
             />
             <label htmlFor={`${prefix}-tips-no`} className="ml-3 block text-sm text-gray-700">
-              No, we don't accept tips
+              No, we do not accept tips
+            </label>
+          </div>
+        </div>
+      </div>
+      {values.hasTips === 'depends' && (
+        <div>
+          <label className="form-label">Why do you not accept tips?</label>
+          <Field
+            type="text"
+            name={`${prefix}.tipDetails`}
+            id={`${prefix}-tip-details`}
+            className="mt-1 block w-full"
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              handleFieldChange(`${prefix}.tipDetails`, e.target.value)
+            }}
+          />
+        </div>
+      )}
+      <div>
+        <label className="form-label">Does your restaurant charge a service fee?</label>
+        <div className="mt-2 space-y-4">
+          <div className="flex items-center">
+            <Field
+              type="radio"
+              name={`${prefix}.hasServiceCharge`}
+              value="yes"
+              id={`${prefix}-service-charge-yes`}
+              className="h-4 w-4 border-gray-300 text-primary-600 focus:ring-primary-600"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                handleFieldChange(`${prefix}.hasServiceCharge`, e.target.value === 'yes')
+              }}
+            />
+            <label htmlFor={`${prefix}-service-charge-yes`} className="ml-3 block text-sm text-gray-700">
+              Yes, we charge a service fee
             </label>
           </div>
           <div className="flex items-center">
             <Field
               type="radio"
-              name={`${prefix}.hasTips`}
-              value="depends"
-              id={`${prefix}-tips-depends`}
+              name={`${prefix}.hasServiceCharge`}
+              value="no"
+              id={`${prefix}-service-charge-no`}
               className="h-4 w-4 border-gray-300 text-primary-600 focus:ring-primary-600"
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                handleFieldChange(`${prefix}.hasTips`, e.target.value)
+                handleFieldChange(`${prefix}.hasServiceCharge`, e.target.value === 'no')
               }}
             />
-            <label htmlFor={`${prefix}-tips-depends`} className="ml-3 block text-sm text-gray-700">
-              It depends (specify below)
+            <label htmlFor={`${prefix}-service-charge-no`} className="ml-3 block text-sm text-gray-700">
+              No, we do not charge a service fee
             </label>
           </div>
         </div>
-        {errors?.hasTips && touched?.hasTips && (
-          <div className="error-message">{errors.hasTips}</div>
-        )}
       </div>
-
-      {(values.hasTips === 'yes' || values.hasTips === 'depends') && (
-        <div>
-          <label htmlFor={`${prefix}-tipDetails`} className="form-label">
-            Tip Details
-          </label>
-          <Field
-            as="textarea"
-            name={`${prefix}.tipDetails`}
-            id={`${prefix}-tipDetails`}
-            rows={3}
-            className="input-field mt-2"
-            placeholder="Explain your tipping policy (e.g., suggested percentages, minimum party size for automatic gratuity, etc.)"
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-              handleFieldChange(`${prefix}.tipDetails`, e.target.value)
-            }}
-          />
-          {errors?.tipDetails && touched?.tipDetails && (
-            <div className="error-message">{errors.tipDetails}</div>
-          )}
-        </div>
-      )}
-
-      <div>
-        <div className="flex items-center">
-          <Field
-            type="checkbox"
-            name={`${prefix}.hasServiceCharge`}
-            id={`${prefix}-hasServiceCharge`}
-            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-600"
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              handleFieldChange(`${prefix}.hasServiceCharge`, e.target.checked)
-            }}
-          />
-          <label htmlFor={`${prefix}-hasServiceCharge`} className="ml-2 block text-sm text-gray-900">
-            We apply a service charge
-          </label>
-        </div>
-        {errors?.hasServiceCharge && touched?.hasServiceCharge && (
-          <div className="error-message">{errors.hasServiceCharge}</div>
-        )}
-      </div>
-
       {values.hasServiceCharge && (
         <div>
-          <label htmlFor={`${prefix}-serviceChargeDetails`} className="form-label">
-            Service Charge Details
-          </label>
+          <label className="form-label">Service fee details</label>
           <Field
-            as="textarea"
+            type="text"
             name={`${prefix}.serviceChargeDetails`}
-            id={`${prefix}-serviceChargeDetails`}
-            rows={3}
-            className="input-field mt-2"
-            placeholder="Explain your service charge policy (e.g., percentage, conditions, etc.)"
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+            id={`${prefix}-service-charge-details`}
+            className="mt-1 block w-full"
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
               handleFieldChange(`${prefix}.serviceChargeDetails`, e.target.value)
             }}
           />
-          {errors?.serviceChargeDetails && touched?.serviceChargeDetails && (
-            <div className="error-message">{errors.serviceChargeDetails}</div>
-          )}
         </div>
       )}
     </div>
   )
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Tips & Service Charges</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Configure your restaurant's tipping and service charge policies.
-        </p>
-      </div>
-
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold mb-4">Tipping Policy</h1>
       <Formik
         initialValues={initialValues}
         validationSchema={validationSchema}
         onSubmit={handleSubmit}
       >
-        {({ values, errors, touched }) => (
+        {({ isSubmitting }) => (
           <Form className="space-y-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center space-x-4">
-                <label className="flex items-center">
+            <div>
+              <label className="form-label">Use location-specific policies</label>
+              <div className="mt-2 space-y-4">
+                <div className="flex items-center">
                   <Field
                     type="radio"
                     name="useGroups"
-                    value={false}
+                    value="yes"
+                    id="use-groups-yes"
                     className="h-4 w-4 border-gray-300 text-primary-600 focus:ring-primary-600"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      handleFieldChange('useGroups', e.target.value === 'yes')
+                    }}
                   />
-                  <span className="ml-2 text-sm text-gray-900">Configure by Location</span>
-                </label>
-                <label className="flex items-center">
+                  <label htmlFor="use-groups-yes" className="ml-3 block text-sm text-gray-700">
+                    Yes, use location-specific policies
+                  </label>
+                </div>
+                <div className="flex items-center">
                   <Field
                     type="radio"
                     name="useGroups"
-                    value={true}
+                    value="no"
+                    id="use-groups-no"
                     className="h-4 w-4 border-gray-300 text-primary-600 focus:ring-primary-600"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      handleFieldChange('useGroups', e.target.value === 'no')
+                    }}
                   />
-                  <span className="ml-2 text-sm text-gray-900">Configure by Groups</span>
-                </label>
+                  <label htmlFor="use-groups-no" className="ml-3 block text-sm text-gray-700">
+                    No, use a single policy for all locations
+                  </label>
+                </div>
               </div>
             </div>
-
-            {!values.useGroups ? (
-              // Por ubicación
-              values.locationPolicies.map((policy, index) => {
-                const location = state.locations.find(l => l.id === policy.locationId)
-                return (
-                  <div key={policy.locationId} className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      {location?.name}
-                    </h3>
-                    {renderPolicyFields(
-                      `locationPolicies.${index}`,
-                      policy,
-                      errors.locationPolicies?.[index] as FormikErrors<LocationPolicy>,
-                      touched.locationPolicies?.[index] as FormikTouched<LocationPolicy>,
-                      location?.name || ''
-                    )}
+            {state.useGroups && (
+              <>
+                {state.locations.map(location => (
+                  <div key={location.id} className="space-y-6">
+                    <h2 className="text-xl font-bold">{location.name}</h2>
+                    {renderPolicyFields(`locationPolicies.${location.id}`, state.tipsPolicy?.locationPolicies?.[location.id] || {}, {}, {}, location.id)}
                   </div>
-                )
-              })
-            ) : (
-              // Por grupo
-              values.groupPolicies.map((policy, index) => {
-                const locationNames = policy.locations
-                  .map(locId => state.locations.find(l => l.id === locId)?.name)
-                  .filter(Boolean)
-                  .join(', ')
-                return (
-                  <div key={policy.groupId} className="bg-white rounded-lg border border-gray-200 p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      {policy.groupId}
-                    </h3>
-                    <p className="text-sm text-gray-500 mb-4">
-                      Locations: {locationNames}
-                    </p>
-                    {renderPolicyFields(
-                      `groupPolicies.${index}`,
-                      policy,
-                      errors.groupPolicies?.[index] as FormikErrors<GroupPolicy>,
-                      touched.groupPolicies?.[index] as FormikTouched<GroupPolicy>,
-                      policy.groupId
-                    )}
+                ))}
+                {state.menuGroups.map(group => (
+                  <div key={group.name} className="space-y-6">
+                    <h2 className="text-xl font-bold">{group.name}</h2>
+                    {renderPolicyFields(`groupPolicies.${group.name}`, state.tipsPolicy?.groupPolicies?.[group.name] || {}, {}, {}, group.name)}
                   </div>
-                )
-              })
+                ))}
+              </>
             )}
-
-            <div className="flex justify-between">
-              <button
-                type="button"
-                onClick={() => navigate('/onboarding/menu-config')}
-                className="btn-secondary"
-              >
-                Back
-              </button>
-              <button type="submit" className="btn-primary">
-                Continue
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700"
+            >
+              {isSubmitting ? 'Saving...' : 'Save'}
+            </button>
           </Form>
         )}
       </Formik>
     </div>
   )
-} 
+}

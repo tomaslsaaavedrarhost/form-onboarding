@@ -13,6 +13,13 @@ import { useFormProgress } from '../hooks/useFormProgress'
 import { createEmptyLocation } from '../utils/locationUtils'
 import { Notification } from '../components/Notification'
 
+// Update the section titles to use gradient text
+const SectionTitle = ({ children }: { children: React.ReactNode }) => (
+  <h3 className="text-lg font-bold tracking-tight bg-gradient-brand bg-clip-text text-transparent mb-4">
+    {children}
+  </h3>
+)
+
 // Lista de estados de EE.UU.
 const US_STATES = [
   { value: 'AL', label: 'Alabama' },
@@ -173,90 +180,8 @@ interface ReservationSettings {
   schedule: WeeklySchedule
 }
 
-export interface ExtendedLocationDetail {
-  locationId: string
+export interface ExtendedLocationDetail extends LocationDetail {
   selectedLocationName?: string
-  state: string
-  streetAddress: string
-  timeZone: string
-  managerEmail: string
-  phoneNumbers: string[]
-  acceptedPaymentMethods: string[]
-  creditCardExclusions: string
-  debitCardExclusions: string
-  mobilePaymentExclusions: string
-  phoneCarrier: string
-  otherPhoneCarrier?: string
-  carrierCredentials: CarrierCredentials
-  schedule: WeeklySchedule
-  defaultTransferToHost: boolean
-  transferRules: TransferRule[]
-  paymentMethodsNotes: string
-  reservationSettings: ReservationSettings
-  waitTimes: {
-    [key: string]: {
-      [timeSlot: string]: string
-    }
-  }
-  pickupSettings: {
-    platforms: string[]
-    preferredPlatform: string
-    preferredPlatformLink: string
-    otherPlatform?: string
-  }
-  deliverySettings: {
-    platforms: string[]
-    preferredPlatform: string
-    preferredPlatformLink: string
-    otherPlatform?: string
-  }
-  parking: ParkingDetails
-  corkage: {
-    allowed: boolean
-    fee: string
-  }
-  specialDiscounts: {
-    hasDiscounts: boolean
-    details: string[]
-  }
-  holidayEvents: {
-    hasEvents: boolean
-    events: any[]
-  }
-  specialEvents: {
-    hasEvents: boolean
-    events: any[]
-  }
-  socialMedia: {
-    instagram: {
-      usesInstagram: boolean
-      handle: string
-    }
-  }
-  birthdayCelebrations: {
-    allowed: boolean
-    details: string
-    restrictions: string[]
-  }
-  dressCode: {
-    hasDressCode: boolean
-    details: string
-    exceptions: string[]
-  }
-  ageVerification: {
-    acceptedDocuments: string[]
-    otherDocuments: string
-  }
-  smokingArea: {
-    hasSmokingArea: boolean
-    details: string
-  }
-  brunchMenu: {
-    hasBrunchMenu: boolean
-    schedule: string
-    menuFile: File | null
-    menuUrl?: string
-  }
 }
 
 interface FormValues {
@@ -313,13 +238,6 @@ const AGE_VERIFICATION_DOCUMENTS = [
   'FOREIGN_PASSPORT',
   'OTHER'
 ] as const
-
-// Update the section titles to use gradient text
-const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-  <h3 className="text-lg font-bold tracking-tight bg-gradient-brand bg-clip-text text-transparent mb-4">
-    {children}
-  </h3>
-)
 
 export const createEmptySchedule = (): WeeklySchedule => {
   const schedule: WeeklySchedule = {}
@@ -394,26 +312,7 @@ const validationSchema = Yup.object().shape({
             is: true,
             then: () => Yup.string().required('required')
           })
-        }),
-        schedule: Yup.object().shape(
-          DAYS_OF_WEEK.reduce((acc, day) => ({
-            ...acc,
-            [day]: Yup.object().shape({
-              enabled: Yup.boolean(),
-              timeSlots: Yup.array().when('enabled', {
-                is: true,
-                then: () => Yup.array().of(
-                  Yup.object().shape({
-                    start: Yup.string().required('required'),
-                    end: Yup.string().required('required'),
-                    type: Yup.string().required('required'),
-                    kitchenClosingTime: Yup.string().nullable()
-                  })
-                ).min(1, 'atLeastOneTimeSlot')
-              })
-            })
-          }), {})
-        )
+        })
       }),
       parking: Yup.object().shape({
         hasParking: Yup.boolean().required('required'),
@@ -432,7 +331,7 @@ const validationSchema = Yup.object().shape({
       })
     })
   )
-})
+});
 
 const TIME_ZONES = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -460,44 +359,30 @@ const LocationDetails: React.FC = () => {
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
 
-  // Validar el estado inicial y las ubicaciones
   useEffect(() => {
-    console.log('Iniciando validación de ubicaciones:', {
-      locationCount: formData.locationCount,
-      locationDetails: state.locationDetails
-    });
-
     const count = typeof formData.locationCount === 'number' ? formData.locationCount : 0;
-
-    // Solo expandir la primera ubicación si ninguna está expandida
     if (expandedLocations.length === 0 && count > 0) {
       const firstLocationId = '1';
-      console.log('Expandiendo primera ubicación:', firstLocationId);
       setExpandedLocations([firstLocationId]);
     }
-
   }, [formData.locationCount, expandedLocations]);
 
-  const toggleAccordion = (id: string) => {
-    setExpandedLocations(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    )
-  }
-
   const handleFieldChange = (setFieldValue: any, field: string, value: any) => {
-    console.log('Campo modificado:', {
-      field,
-      value
-    });
-    
     setHasUnsavedChanges(true);
     setFieldValue(field, value);
   };
 
+  const handleNext = (values: FormValues) => {
+    if (hasUnsavedChanges) {
+      setShowSavePrompt(true);
+    } else {
+      dispatch({ type: 'SET_LOCATION_DETAILS', payload: values.locationDetails });
+      navigate('/onboarding/ai-config', { replace: true });
+    }
+  };
+
   const handleSave = async (values: FormValues) => {
     try {
-      console.log('Guardando detalles de ubicación:', values);
-      
       const locationDetails = values.locationDetails.map(location => ({
         ...location,
         phoneNumbers: location.phoneNumbers || [],
@@ -515,23 +400,17 @@ const LocationDetails: React.FC = () => {
       setHasUnsavedChanges(false);
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 3000);
-      
-      console.log('Detalles guardados exitosamente');
     } catch (error) {
       console.error('Error al guardar los detalles:', error);
     }
   };
 
-  const handleNext = (values: FormValues) => {
-    if (hasUnsavedChanges) {
-      setShowSavePrompt(true);
-    } else {
-      dispatch({ type: 'SET_LOCATION_DETAILS', payload: values.locationDetails });
-      navigate('/onboarding/ai-config', { replace: true });
-    }
+  const toggleAccordion = (id: string) => {
+    setExpandedLocations(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
   };
 
-  // Componente para el modal de confirmación
   const SavePrompt = ({ values }: { values: any }) => {
     if (!showSavePrompt) return null;
 
