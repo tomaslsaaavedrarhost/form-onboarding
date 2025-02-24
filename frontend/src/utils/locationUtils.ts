@@ -1,6 +1,5 @@
 import { LocationDetail, WeeklySchedule } from '../context/FormContext'
 import type { ExtendedLocationDetail } from '../pages/LocationDetails'
-import { createEmptySchedule } from '../pages/LocationDetails'
 
 export function createEmptySchedule(): WeeklySchedule {
   const schedule: WeeklySchedule = {}
@@ -43,9 +42,6 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
     reservationLink: '',
     phoneCarrier: '',
     gracePeriod: 15,
-    maxAdvanceTime: undefined,
-    maxAdvanceTimeUnit: 'days',
-    maxPartySize: undefined,
     parking: {
       hasParking: false,
       parkingType: undefined,
@@ -66,12 +62,14 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
   pickupSettings: {
     platforms: [],
     preferredPlatform: '',
-    preferredPlatformLink: ''
+    preferredPlatformLink: '',
+    otherPlatform: ''
   },
   deliverySettings: {
     platforms: [],
     preferredPlatform: '',
-    preferredPlatformLink: ''
+    preferredPlatformLink: '',
+    otherPlatform: ''
   },
   parking: {
     hasParking: false,
