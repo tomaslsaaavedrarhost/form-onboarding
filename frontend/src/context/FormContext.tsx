@@ -8,20 +8,25 @@ interface Location {
   nameConfirmed: boolean
 }
 
-interface MenuGroup {
+export interface MenuGroup {
   name: string
-  locations: string[]
-  regularMenu?: File | null
-  dietaryMenu?: File | null
-  veganMenu?: File | null
-  otherMenus?: MenuFile[]
-  sharedDishes?: string
-  sharedDrinks?: string
-  popularAppetizers?: string
-  popularMainCourses?: string
-  popularDesserts?: string
-  popularAlcoholicDrinks?: string
-  popularNonAlcoholicDrinks?: string
+  regularMenu: File | null
+  regularMenuUrl: string
+  hasDietaryMenu: boolean
+  dietaryMenu: File | null
+  dietaryMenuUrl: string
+  hasVeganMenu: boolean
+  veganMenu: File | null
+  veganMenuUrl: string
+  otherMenus: File[]
+  otherMenuUrls: string[]
+  sharedDishes: string
+  sharedDrinks: string
+  popularAppetizers: string
+  popularMainCourses: string
+  popularDesserts: string
+  popularAlcoholicDrinks: string
+  popularNonAlcoholicDrinks: string
 }
 
 interface MenuFile {
@@ -434,4 +439,4 @@ export function createEmptySchedule(): WeeklySchedule {
   return schedule
 }
 
-export type { FormState, Location, MenuGroup, MenuFile, MenuConfig } 
+export type { FormState, Location, MenuFile, MenuConfig } 

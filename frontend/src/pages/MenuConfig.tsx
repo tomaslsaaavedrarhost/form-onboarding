@@ -7,46 +7,31 @@ import * as Yup from 'yup'
 import { DocumentIcon, TrashIcon, LinkIcon } from '@heroicons/react/24/outline'
 import FormActions from '../components/FormActions'
 import { Notification } from '../components/Notification'
-
-interface MenuGroup {
-  name: string
-  regularMenuUrl: string
-  hasDietaryMenu: boolean
-  dietaryMenu: File | null
-  dietaryMenuUrl: string
-  hasVeganMenu: boolean
-  veganMenu: File | null
-  veganMenuUrl: string
-  otherMenus: File[]
-  otherMenuUrls: string[]
-  sharedDishes: string
-  sharedDrinks: string
-  popularAppetizers: string
-  popularMainCourses: string
-  popularDesserts: string
-  popularAlcoholicDrinks: string
-  popularNonAlcoholicDrinks: string
-}
+import { MenuGroup as MenuGroupType } from '../context/FormContext'
 
 interface FormValues {
-  menuGroups: MenuGroup[]
+  menuGroups: MenuGroupType[]
 }
 
 const validationSchema = Yup.object().shape({
   menuGroups: Yup.array().of(
     Yup.object().shape({
       name: Yup.string().required('El nombre del grupo es requerido'),
+      regularMenu: Yup.mixed().nullable(),
       regularMenuUrl: Yup.string().url('Debe ser una URL válida').required('La URL del menú regular es requerida'),
       hasDietaryMenu: Yup.boolean(),
+      dietaryMenu: Yup.mixed().nullable(),
       dietaryMenuUrl: Yup.string().url('Debe ser una URL válida').when('hasDietaryMenu', {
         is: true,
         then: () => Yup.string().required('La URL del menú dietético es requerida si tiene uno')
       }),
       hasVeganMenu: Yup.boolean(),
+      veganMenu: Yup.mixed().nullable(),
       veganMenuUrl: Yup.string().url('Debe ser una URL válida').when('hasVeganMenu', {
         is: true,
         then: () => Yup.string().required('La URL del menú vegano es requerida si tiene uno')
       }),
+      otherMenus: Yup.array().of(Yup.mixed()),
       otherMenuUrls: Yup.array().of(Yup.string().url('Debe ser una URL válida')),
       sharedDishes: Yup.string().required('Los platos compartidos son requeridos'),
       sharedDrinks: Yup.string().required('Las bebidas compartidas son requeridas'),
@@ -69,6 +54,7 @@ export default function MenuConfig() {
   const initialValues: FormValues = {
     menuGroups: formData.menuGroups?.map(group => ({
       name: group.name || '',
+      regularMenu: group.regularMenu || null,
       regularMenuUrl: group.regularMenuUrl || '',
       hasDietaryMenu: group.hasDietaryMenu || false,
       dietaryMenu: group.dietaryMenu || null,
@@ -88,6 +74,7 @@ export default function MenuConfig() {
     })) || [
       {
         name: '',
+        regularMenu: null,
         regularMenuUrl: '',
         hasDietaryMenu: false,
         dietaryMenu: null,
@@ -114,6 +101,7 @@ export default function MenuConfig() {
     if (!updatedGroups[groupIndex]) {
       updatedGroups[groupIndex] = {
         name: '',
+        regularMenu: null,
         regularMenuUrl: '',
         hasDietaryMenu: false,
         dietaryMenu: null,
