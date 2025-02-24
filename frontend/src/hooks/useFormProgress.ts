@@ -64,10 +64,18 @@ export interface FormData {
   }[];
   menuGroups?: {
     name: string;
+    locations: string[];
     regularMenu: File | null;
+    regularMenuUrl: string;
+    hasDietaryMenu: boolean;
     dietaryMenu: File | null;
+    dietaryMenuUrl: string;
+    hasVeganMenu: boolean;
     veganMenu: File | null;
+    veganMenuUrl: string;
+    hasOtherMenus: boolean;
     otherMenus: File[];
+    otherMenuUrls: string[];
     sharedDishes: string;
     sharedDrinks: string;
     popularAppetizers: string;
