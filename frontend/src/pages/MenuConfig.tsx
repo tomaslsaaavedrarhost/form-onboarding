@@ -17,6 +17,7 @@ const validationSchema = Yup.object().shape({
   menuGroups: Yup.array().of(
     Yup.object().shape({
       name: Yup.string().required('El nombre del grupo es requerido'),
+      locations: Yup.array().of(Yup.string()).required(),
       regularMenu: Yup.mixed().nullable(),
       regularMenuUrl: Yup.string().url('Debe ser una URL válida').required('La URL del menú regular es requerida'),
       hasDietaryMenu: Yup.boolean(),
@@ -31,6 +32,7 @@ const validationSchema = Yup.object().shape({
         is: true,
         then: () => Yup.string().required('La URL del menú vegano es requerida si tiene uno')
       }),
+      hasOtherMenus: Yup.boolean(),
       otherMenus: Yup.array().of(Yup.mixed()),
       otherMenuUrls: Yup.array().of(Yup.string().url('Debe ser una URL válida')),
       sharedDishes: Yup.string().required('Los platos compartidos son requeridos'),
@@ -54,6 +56,7 @@ export default function MenuConfig() {
   const initialValues: FormValues = {
     menuGroups: formData.menuGroups?.map(group => ({
       name: group.name || '',
+      locations: group.locations || [],
       regularMenu: group.regularMenu || null,
       regularMenuUrl: group.regularMenuUrl || '',
       hasDietaryMenu: group.hasDietaryMenu || false,
@@ -62,6 +65,7 @@ export default function MenuConfig() {
       hasVeganMenu: group.hasVeganMenu || false,
       veganMenu: group.veganMenu || null,
       veganMenuUrl: group.veganMenuUrl || '',
+      hasOtherMenus: group.hasOtherMenus || false,
       otherMenus: group.otherMenus || [],
       otherMenuUrls: group.otherMenuUrls || [],
       sharedDishes: group.sharedDishes || '',
@@ -74,6 +78,7 @@ export default function MenuConfig() {
     })) || [
       {
         name: '',
+        locations: [],
         regularMenu: null,
         regularMenuUrl: '',
         hasDietaryMenu: false,
@@ -82,6 +87,7 @@ export default function MenuConfig() {
         hasVeganMenu: false,
         veganMenu: null,
         veganMenuUrl: '',
+        hasOtherMenus: false,
         otherMenus: [],
         otherMenuUrls: [],
         sharedDishes: '',
@@ -101,6 +107,7 @@ export default function MenuConfig() {
     if (!updatedGroups[groupIndex]) {
       updatedGroups[groupIndex] = {
         name: '',
+        locations: [],
         regularMenu: null,
         regularMenuUrl: '',
         hasDietaryMenu: false,
@@ -109,6 +116,7 @@ export default function MenuConfig() {
         hasVeganMenu: false,
         veganMenu: null,
         veganMenuUrl: '',
+        hasOtherMenus: false,
         otherMenus: [],
         otherMenuUrls: [],
         sharedDishes: '',
