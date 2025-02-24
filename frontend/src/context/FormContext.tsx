@@ -10,6 +10,7 @@ interface Location {
 
 export interface MenuGroup {
   name: string
+  locations: string[]
   regularMenu: File | null
   regularMenuUrl: string
   hasDietaryMenu: boolean
@@ -20,6 +21,7 @@ export interface MenuGroup {
   veganMenuUrl: string
   otherMenus: File[]
   otherMenuUrls: string[]
+  hasOtherMenus: boolean
   sharedDishes: string
   sharedDrinks: string
   popularAppetizers: string
@@ -27,7 +29,6 @@ export interface MenuGroup {
   popularDesserts: string
   popularAlcoholicDrinks: string
   popularNonAlcoholicDrinks: string
-  locations?: string[] // Optional property for backward compatibility
 }
 
 interface MenuFile {
@@ -106,12 +107,14 @@ interface PickupSettings {
   platforms: string[]
   preferredPlatform: string
   preferredPlatformLink: string
+  otherPlatform?: string
 }
 
 interface DeliverySettings {
   platforms: string[]
   preferredPlatform: string
   preferredPlatformLink: string
+  otherPlatform?: string
 }
 
 interface ParkingDetails {
@@ -186,11 +189,13 @@ export interface LocationDetail {
     platforms: string[]
     preferredPlatform: string
     preferredPlatformLink: string
+    otherPlatform?: string
   }
   deliverySettings: {
     platforms: string[]
     preferredPlatform: string
     preferredPlatformLink: string
+    otherPlatform?: string
   }
   parking: {
     hasParking: boolean

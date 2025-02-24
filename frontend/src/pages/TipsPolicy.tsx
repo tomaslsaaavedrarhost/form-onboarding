@@ -320,7 +320,7 @@ export default function TipsPolicy() {
                 </div>
               </div>
             </div>
-            {state.useGroups && (
+            {state.tipsPolicy?.useGroups && (
               <>
                 {state.locations.map(location => (
                   <div key={location.id} className="space-y-6">

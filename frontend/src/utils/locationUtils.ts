@@ -60,10 +60,9 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
     sunday: {}
   },
   pickupSettings: {
-    platforms: [],
-    preferredPlatform: '',
-    preferredPlatformLink: '',
-    otherPlatform: ''
+    platforms: ['Resy'],
+    preferredPlatform: 'Resy',
+    preferredPlatformLink: 'https://resy.com'
   },
   deliverySettings: {
     platforms: [],
