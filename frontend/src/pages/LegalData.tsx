@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormProgress } from '../hooks/useFormProgress'
 import { useTranslation } from '../hooks/useTranslation'
@@ -83,6 +83,7 @@ const LegalData = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
+  const [unconfirmedLocationsError, setUnconfirmedLocationsError] = useState(false)
   const [localData, setLocalData] = useState<FormState>({
     businessName: formData.businessName || '',
     legalBusinessName: formData.legalBusinessName || '',
@@ -174,7 +175,20 @@ const LegalData = () => {
 
     // Resetear el estado de cambios sin guardar cuando se actualiza desde formData
     setHasUnsavedChanges(false);
+    if (window.onFormStateChange) {
+      window.onFormStateChange(false);
+    }
   }, [formData]);
+
+  // Efecto para limpiar el estado de cambios sin guardar cuando se desmonta el componente
+  useEffect(() => {
+    return () => {
+      // Limpiar el estado de cambios sin guardar al desmontar el componente
+      if (window.onFormStateChange) {
+        window.onFormStateChange(false);
+      }
+    };
+  }, []);
 
   // Agregar useEffect para validar la consistencia de datos
   useEffect(() => {
@@ -227,20 +241,17 @@ const LegalData = () => {
 
   }, [localData.locationCount, localData.locations]);
 
-  // Función para guardar los cambios
-  const handleSave = async () => {
-    await saveFormData()
-    setHasUnsavedChanges(false)
-    setShowNotification(true)
-    setTimeout(() => setShowNotification(false), 3000)
-  }
-
   // Modificar handleFieldChange para marcar cambios sin guardar
   const handleFieldChange = (
     fieldName: keyof FormState,
     value: any
   ) => {
     setHasUnsavedChanges(true)
+    // Comunicar al componente padre que hay cambios sin guardar
+    if (window.onFormStateChange) {
+      window.onFormStateChange(true)
+    }
+    
     setLocalData(prev => ({ ...prev, [fieldName]: value }))
 
     if (typeof value === 'string' && ['legalBusinessName', 'taxId', 'otherRestaurantType'].includes(fieldName)) {
@@ -255,6 +266,28 @@ const LegalData = () => {
 
     updateField(fieldName, value)
   }
+
+  // Función para guardar los cambios
+  const handleSave = useCallback(async () => {
+    await saveFormData()
+    setHasUnsavedChanges(false)
+    // Comunicar al componente padre que no hay cambios sin guardar
+    if (window.onFormStateChange) {
+      window.onFormStateChange(false)
+    }
+    setShowNotification(true)
+    setTimeout(() => setShowNotification(false), 3000)
+    return true // Indicar que el guardado fue exitoso
+  }, [saveFormData, setHasUnsavedChanges, setShowNotification])
+
+  // Exponer la función handleSave a través de window.saveCurrentFormData
+  useEffect(() => {
+    window.saveCurrentFormData = handleSave
+    
+    return () => {
+      delete window.saveCurrentFormData
+    }
+  }, [handleSave])
 
   // Manejar subida de archivos
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -404,6 +437,21 @@ const LegalData = () => {
 
   // Función para manejar la navegación
   const handleNext = () => {
+    // Verificar si hay ubicaciones con nombre pero sin confirmar
+    const hasUnconfirmedLocations = localData.locations.some(
+      location => location.name.trim() !== '' && !location.nameConfirmed
+    );
+
+    if (hasUnconfirmedLocations) {
+      setUnconfirmedLocationsError(true);
+      // Mostrar el error por 3 segundos
+      setTimeout(() => setUnconfirmedLocationsError(false), 3000);
+      return;
+    }
+
+    // Resetear el error si no hay ubicaciones sin confirmar
+    setUnconfirmedLocationsError(false);
+
     if (hasUnsavedChanges) {
       setShowSavePrompt(true)
     } else {
@@ -414,6 +462,36 @@ const LegalData = () => {
   // Componente para el modal de confirmación
   const SavePrompt = () => {
     if (!showSavePrompt) return null
+
+    // Verificar si hay ubicaciones con nombre pero sin confirmar
+    const hasUnconfirmedLocations = localData.locations.some(
+      location => location.name.trim() !== '' && !location.nameConfirmed
+    );
+
+    const handleContinueWithoutSaving = () => {
+      if (hasUnconfirmedLocations) {
+        setShowSavePrompt(false);
+        setUnconfirmedLocationsError(true);
+        setTimeout(() => setUnconfirmedLocationsError(false), 3000);
+        return;
+      }
+      setShowSavePrompt(false);
+      navigate('/onboarding/contact-info');
+    };
+
+    const handleSaveAndContinue = async () => {
+      if (hasUnconfirmedLocations) {
+        setShowSavePrompt(false);
+        setUnconfirmedLocationsError(true);
+        setTimeout(() => setUnconfirmedLocationsError(false), 3000);
+        return;
+      }
+      const success = await handleSave();
+      if (success) {
+        setShowSavePrompt(false);
+        navigate('/onboarding/contact-info');
+      }
+    };
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -426,20 +504,13 @@ const LegalData = () => {
           </p>
           <div className="flex justify-end space-x-4">
             <button
-              onClick={() => {
-                setShowSavePrompt(false)
-                navigate('/onboarding/contact-info')
-              }}
+              onClick={handleContinueWithoutSaving}
               className="btn-secondary"
             >
               Continuar sin guardar
             </button>
             <button
-              onClick={async () => {
-                await handleSave()
-                setShowSavePrompt(false)
-                navigate('/onboarding/contact-info')
-              }}
+              onClick={handleSaveAndContinue}
               className="btn-primary"
             >
               Guardar y continuar
@@ -585,7 +656,7 @@ const LegalData = () => {
               />
               <span>Mismo menú para todas las ubicaciones</span>
             </label>
-            {!localData.sameMenuForAll && (
+            {!localData.sameMenuForAll && localData.groups.length < 2 && (
               <div className="mt-2 pl-8 space-y-1">
                 <p className="text-sm text-red-600">
                   Debes tener al menos dos grupos cuando no uses el mismo menú para todas las ubicaciones.
@@ -662,7 +733,7 @@ const LegalData = () => {
               <div key={group.id} className="card">
                 <div className="flex justify-between items-center mb-4">
                   <div className="text-lg font-medium text-gray-900">{generateGroupName(index)}</div>
-                  {localData.groups.length > 2 && (
+                  {localData.groups.length > 1 && (
                     <button
                       onClick={() => {
                         const newGroups = localData.groups.filter((_, i) => i !== index);
@@ -716,7 +787,12 @@ const LegalData = () => {
         >
           {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
         </button>
-        <div className="flex space-x-4">
+        <div className="flex flex-col items-end">
+          {unconfirmedLocationsError && (
+            <p className="text-sm text-red-600 mb-2">
+              Debes confirmar todas las ubicaciones antes de continuar.
+            </p>
+          )}
           <button
             type="button"
             onClick={handleNext}

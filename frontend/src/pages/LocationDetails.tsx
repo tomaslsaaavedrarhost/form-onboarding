@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Formik, Form, Field, FieldArray } from 'formik'
 import * as Yup from 'yup'
@@ -7,11 +7,20 @@ import type { LocationDetail, WeeklySchedule as WeeklyScheduleType } from '../co
 import { useTranslation } from '../hooks/useTranslation'
 import { TimeSlots } from '../components/TimeSlots'
 import WeeklyScheduleComponent from '../components/WeeklySchedule'
-import { ChevronDownIcon } from '@heroicons/react/24/outline'
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import { useFormikContext } from 'formik'
 import { useFormProgress } from '../hooks/useFormProgress'
 import { createEmptyLocation } from '../utils/locationUtils'
 import { Notification } from '../components/Notification'
+import { Disclosure } from '@headlessui/react'
+
+// Extender la interfaz Window para incluir saveCurrentFormData
+declare global {
+  interface Window {
+    onFormStateChange?: (hasChanges: boolean) => void;
+    saveCurrentFormData?: () => Promise<boolean>;
+  }
+}
 
 // Update the section titles to use gradient text
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
@@ -359,13 +368,55 @@ const LocationDetails: React.FC = () => {
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
 
+  // Effect to automatically set selectedLocationName based on the confirmed locations
   useEffect(() => {
-    const count = typeof formData.locationCount === 'number' ? formData.locationCount : 0;
-    if (expandedLocations.length === 0 && count > 0) {
-      const firstLocationId = '1';
-      setExpandedLocations([firstLocationId]);
+    // Safely extract locations from formData
+    const locations = formData?.locations || [];
+    
+    // Only proceed if locations array has elements
+    if (locations.length > 0) {
+      console.log("DEBUG - formData.locations:", locations);
+      
+      // Get confirmed locations
+      const confirmedLocations = locations.filter(loc => loc.nameConfirmed && loc.name);
+      
+      if (confirmedLocations.length > 0) {
+        // Create a map of locationDetails that already have selectedLocationName
+        const selectedNameMap = new Map();
+        state.locationDetails.forEach((loc, i) => {
+          if (loc.selectedLocationName) {
+            selectedNameMap.set(loc.selectedLocationName, i);
+          }
+        });
+        
+        // Create a new array of locationDetails with assigned names
+        const updatedLocationDetails = [...state.locationDetails];
+        
+        // First assign names to locationDetails that don't have one yet
+        confirmedLocations.forEach(confirmedLoc => {
+          // Skip if this name is already assigned
+          if (selectedNameMap.has(confirmedLoc.name)) return;
+          
+          // Find the first locationDetail without a name and assign this name
+          const emptyIndex = updatedLocationDetails.findIndex(loc => !loc.selectedLocationName);
+          if (emptyIndex >= 0) {
+            updatedLocationDetails[emptyIndex] = {
+              ...updatedLocationDetails[emptyIndex],
+              selectedLocationName: confirmedLoc.name
+            };
+          }
+        });
+        
+        console.log("DEBUG - Updated locationDetails with names:", updatedLocationDetails);
+        
+        // Update locationDetails with the new array that includes selectedLocationName
+        dispatch({
+          type: 'SET_LOCATION_DETAILS',
+          payload: updatedLocationDetails
+        });
+      }
     }
-  }, [formData.locationCount, expandedLocations]);
+  }, [formData, state.locationDetails, dispatch]);
 
   const handleFieldChange = (setFieldValue: any, field: string, value: any) => {
     setHasUnsavedChanges(true);
@@ -381,7 +432,14 @@ const LocationDetails: React.FC = () => {
     }
   };
 
-  const handleSave = async (values: FormValues) => {
+  // Comunicar cambios al componente padre
+  useEffect(() => {
+    if (window.onFormStateChange) {
+      window.onFormStateChange(hasUnsavedChanges);
+    }
+  }, [hasUnsavedChanges]);
+
+  const handleSave = useCallback(async (values: FormValues) => {
     try {
       const locationDetails = values.locationDetails.map(location => ({
         ...location,
@@ -400,10 +458,35 @@ const LocationDetails: React.FC = () => {
       setHasUnsavedChanges(false);
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 3000);
+      return true; // Indicar que el guardado fue exitoso
     } catch (error) {
       console.error('Error al guardar los detalles:', error);
+      return false;
     }
-  };
+  }, [dispatch, saveFormData, setHasUnsavedChanges, setShowNotification]);
+
+  // Exponer handleSave a través de window.saveCurrentFormData
+  useEffect(() => {
+    // Necesitamos una función que capture los valores actuales
+    window.saveCurrentFormData = async () => {
+      // Obtenemos los valores actuales del formulario
+      const formikContext = document.querySelector('form')?.getAttribute('data-formik-values');
+      if (formikContext) {
+        try {
+          const values = JSON.parse(formikContext);
+          return await handleSave(values);
+        } catch (e) {
+          console.error('Error al parsear los valores del formulario:', e);
+          return false;
+        }
+      }
+      return false;
+    };
+    
+    return () => {
+      window.saveCurrentFormData = undefined;
+    };
+  }, [handleSave]);
 
   const toggleAccordion = (id: string) => {
     setExpandedLocations(prev =>
@@ -436,9 +519,35 @@ const LocationDetails: React.FC = () => {
             </button>
             <button
               onClick={async () => {
-                await handleSave(values);
-                setShowSavePrompt(false);
-                navigate('/onboarding/ai-config', { replace: true });
+                try {
+                  // Guardamos primero los valores actuales en el contexto
+                  const locationDetails = values.locationDetails.map((location: any) => ({
+                    ...location,
+                    phoneNumbers: location.phoneNumbers || [],
+                    acceptedPaymentMethods: location.acceptedPaymentMethods || [],
+                    parking: {
+                      hasParking: location.parking?.hasParking || false,
+                      parkingType: location.parking?.parkingType,
+                      pricingDetails: location.parking?.pricingDetails || '',
+                      location: location.parking?.location || ''
+                    }
+                  }));
+                  
+                  await dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails });
+                  
+                  // Usamos handleSave directamente con los valores actuales
+                  const success = await handleSave(values);
+                  
+                  if (success) {
+                    setShowSavePrompt(false);
+                    setHasUnsavedChanges(false);
+                    navigate('/onboarding/ai-config', { replace: true });
+                  } else {
+                    console.error('No se pudo guardar los datos de ubicación');
+                  }
+                } catch (e) {
+                  console.error('Error al guardar los datos:', e);
+                }
               }}
               className="btn-primary"
             >
@@ -456,17 +565,32 @@ const LocationDetails: React.FC = () => {
         initialValues={{
           locationDetails: state.locationDetails?.length > 0 
             ? state.locationDetails 
-            : Array(typeof formData.locationCount === 'number' ? formData.locationCount : 0).fill(null).map((_, index) => ({
-                ...createEmptyLocation(),
-                locationId: String(index + 1)
-              }))
+            : Array((() => {
+                // Determine the number of accordions to show
+                const confirmedLocations = (formData.locations || []).filter(loc => loc.nameConfirmed && loc.name);
+                // If we have confirmed locations, use that count, otherwise fall back to locationCount
+                return confirmedLocations.length > 0 
+                  ? confirmedLocations.length 
+                  : (typeof formData.locationCount === 'number' ? formData.locationCount : 0);
+              })()).fill(null).map((_, index) => {
+                // Try to match with a confirmed location name if available
+                const confirmedLocation = (formData.locations || [])
+                  .filter(loc => loc.nameConfirmed && loc.name)
+                  [index];
+                  
+                return {
+                  ...createEmptyLocation(),
+                  locationId: String(index + 1),
+                  selectedLocationName: confirmedLocation?.name || ''
+                };
+              })
         }}
         enableReinitialize={true}
         validationSchema={validationSchema}
         onSubmit={handleNext}
       >
         {({ values, setFieldValue }) => (
-          <Form className="space-y-8">
+          <Form className="space-y-8" data-formik-values={JSON.stringify(values)}>
             {showNotification && (
               <Notification
                 message="Los cambios han sido guardados correctamente"
@@ -484,14 +608,11 @@ const LocationDetails: React.FC = () => {
                   onClick={() => toggleAccordion(String(index))}
                 >
                   <div className="flex items-center space-x-2">
+                    {/* Add more visible debugging to help troubleshoot */}
+                    {/* {console.log(`Rendering header for location[${index}]:`, location.selectedLocationName || `Location ${index + 1}`)} */}
                     <span className="text-lg font-medium text-gray-900">
-                      {t('location')} {index + 1}
+                      Location: {location.selectedLocationName || `Location ${index + 1}`}
                     </span>
-                    {location.selectedLocationName && (
-                      <span className="text-sm text-gray-500">
-                        ({location.selectedLocationName})
-                      </span>
-                    )}
                   </div>
                   <ChevronDownIcon
                     className={`w-5 h-5 text-gray-500 transform transition-transform ${
@@ -506,49 +627,6 @@ const LocationDetails: React.FC = () => {
                     : 'max-h-0 opacity-0 overflow-hidden'
                 }`}>
                   <div className="p-4 space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Selecciona el nombre de la ubicación
-                      </label>
-                      <p className="mt-1 text-sm text-gray-500">
-                        Elige a qué ubicación corresponden estos detalles
-                      </p>
-                      <Field
-                        as="select"
-                        name={`locationDetails.${index}.selectedLocationName`}
-                        className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                          const selectedName = e.target.value;
-                          const isNameTaken = values.locationDetails.some(
-                            (loc, i) => i !== index && loc.selectedLocationName === selectedName
-                          );
-                          if (!isNameTaken) {
-                            handleFieldChange(setFieldValue, `locationDetails.${index}.selectedLocationName`, selectedName);
-                          } else {
-                            alert('Este nombre de ubicación ya ha sido seleccionado para otra ubicación');
-                            e.target.value = values.locationDetails[index].selectedLocationName || '';
-                          }
-                        }}
-                      >
-                        <option value="">Selecciona una ubicación...</option>
-                        {(formData.locations || [])
-                          .filter(loc => loc.name && loc.nameConfirmed)
-                          .filter(loc => 
-                            !values.locationDetails.some(
-                              (detail, i) => 
-                                i !== index && 
-                                detail.selectedLocationName === loc.name
-                            )
-                          )
-                          .map(loc => (
-                            <option key={loc.name} value={loc.name}>
-                              {loc.name}
-                            </option>
-                          ))
-                        }
-                      </Field>
-                    </div>
-
                     <SectionTitle>Basic Location Information</SectionTitle>
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                       <div>

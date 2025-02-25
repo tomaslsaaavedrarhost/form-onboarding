@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Formik, Form, Field } from 'formik'
 import * as Yup from 'yup'
@@ -7,16 +7,27 @@ import { useTranslation } from '../hooks/useTranslation'
 import { useFormProgress } from '../hooks/useFormProgress'
 import { Notification } from '../components/Notification'
 
+// Extender la interfaz Window para incluir saveCurrentFormData
+declare global {
+  interface Window {
+    onFormStateChange?: (hasChanges: boolean) => void;
+    saveCurrentFormData?: () => Promise<boolean>;
+  }
+}
+
 const validationSchema = Yup.object().shape({
   language: Yup.string().required('Language is required'),
   assistantName: Yup.string(),
   assistantGender: Yup.string()
     .required('Assistant gender is required')
     .oneOf(['male', 'female', 'neutral'], 'Invalid gender selection'),
-  personality: Yup.string()
+  personality: Yup.array()
+    .of(Yup.string())
+    .min(1, 'Seleccione al menos una personalidad')
+    .max(3, 'Seleccione como máximo 3 personalidades')
     .required('Personality trait is required'),
   otherPersonality: Yup.string().when('personality', {
-    is: 'other',
+    is: (personalities: string[]) => personalities && personalities.includes('other'),
     then: () => Yup.string().required('Please describe the personality'),
     otherwise: () => Yup.string(),
   }),
@@ -28,7 +39,7 @@ interface FormValues {
   otherLanguage: string
   assistantName: string
   assistantGender: string
-  personality: string
+  personality: string[]
   otherPersonality: string
   additionalInfo: string
 }
@@ -62,14 +73,19 @@ export default function AIConfig() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
+  const [maxPersonalitiesError, setMaxPersonalitiesError] = useState(false)
 
   const initialValues: FormValues = {
     language: state.aiConfig?.language || 'en',
     otherLanguage: state.aiConfig?.otherLanguage || '',
     assistantName: state.aiConfig?.assistantName || '',
     assistantGender: state.aiConfig?.assistantGender || '',
-    personality: state.aiConfig?.personality || '',
-    otherPersonality: '',
+    personality: Array.isArray(state.aiConfig?.personality) 
+      ? state.aiConfig.personality 
+      : state.aiConfig?.personality 
+        ? [state.aiConfig.personality] 
+        : [],
+    otherPersonality: state.aiConfig?.otherPersonality || '',
     additionalInfo: state.aiConfig?.additionalInfo || '',
   }
 
@@ -85,12 +101,23 @@ export default function AIConfig() {
     })
   }
 
-  const handleSave = async (values: FormValues) => {
+  // Comunicar cambios al componente padre
+  useEffect(() => {
+    if (window.onFormStateChange) {
+      window.onFormStateChange(hasUnsavedChanges);
+    }
+  }, [hasUnsavedChanges]);
+
+  const handleSave = useCallback(async (values: FormValues) => {
     try {
+      // Asegurarse que personality es un array
+      const personalityArray = Array.isArray(values.personality) ? values.personality : [values.personality];
+      
       dispatch({
         type: 'SET_AI_CONFIG',
         payload: {
           ...values,
+          personality: personalityArray,
           avatar: null
         }
       })
@@ -98,19 +125,47 @@ export default function AIConfig() {
       setHasUnsavedChanges(false)
       setShowNotification(true)
       setTimeout(() => setShowNotification(false), 3000)
+      return true; // Indicar que el guardado fue exitoso
     } catch (error) {
       console.error('Error al guardar:', error)
+      return false;
     }
-  }
+  }, [dispatch, saveFormData, setHasUnsavedChanges, setShowNotification]);
+
+  // Exponer handleSave a través de window.saveCurrentFormData
+  useEffect(() => {
+    window.saveCurrentFormData = async () => {
+      // Obtenemos los valores actuales del formulario
+      const formikContext = document.querySelector('form')?.getAttribute('data-formik-values');
+      if (formikContext) {
+        try {
+          const values = JSON.parse(formikContext);
+          return await handleSave(values);
+        } catch (e) {
+          console.error('Error al parsear los valores del formulario:', e);
+          return false;
+        }
+      }
+      return false;
+    };
+    
+    return () => {
+      window.saveCurrentFormData = undefined;
+    };
+  }, [handleSave]);
 
   const handleNext = (values: FormValues) => {
     if (hasUnsavedChanges) {
       setShowSavePrompt(true)
     } else {
+      // Asegurarse que personality es un array
+      const personalityArray = Array.isArray(values.personality) ? values.personality : [values.personality];
+      
       dispatch({
         type: 'SET_AI_CONFIG',
         payload: {
           ...values,
+          personality: personalityArray,
           avatar: null
         }
       })
@@ -133,7 +188,7 @@ export default function AIConfig() {
         onSubmit={handleNext}
       >
         {({ values, errors, touched, setFieldValue }) => (
-          <Form className="space-y-8">
+          <Form className="space-y-8" data-formik-values={JSON.stringify(values)}>
             {showNotification && (
               <Notification
                 message="Los cambios han sido guardados correctamente"
@@ -157,18 +212,38 @@ export default function AIConfig() {
                         setShowSavePrompt(false);
                         handleNext(values);
                       }}
-                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all"
+                      className="btn-secondary"
                     >
                       Continuar sin guardar
                     </button>
                     <button
                       type="button"
                       onClick={async () => {
-                        await handleSave(values);
-                        setShowSavePrompt(false);
-                        handleNext(values);
+                        try {
+                          // Asegurarse que personality es un array
+                          const personalityArray = Array.isArray(values.personality) ? values.personality : [values.personality];
+                          
+                          // Guardamos primero los valores actuales en el contexto
+                          dispatch({
+                            type: 'SET_AI_CONFIG',
+                            payload: {
+                              ...values,
+                              personality: personalityArray,
+                              avatar: null
+                            }
+                          });
+                          // Usamos directamente saveFormData
+                          const success = await saveFormData();
+                          if (success) {
+                            setShowSavePrompt(false);
+                            setHasUnsavedChanges(false);
+                            navigate('/onboarding/menu-config');
+                          }
+                        } catch (e) {
+                          console.error('Error al guardar los datos:', e);
+                        }
                       }}
-                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-[#2563eb] to-[#1d4ed8] rounded-md shadow-sm hover:from-[#1d4ed8] hover:to-[#1e40af] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all"
+                      className="btn-primary"
                     >
                       Guardar y continuar
                     </button>
@@ -190,7 +265,7 @@ export default function AIConfig() {
                     as="select"
                     id="language"
                     name="language"
-                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                       const value = e.target.value;
                       setFieldValue('language', value);
@@ -220,7 +295,7 @@ export default function AIConfig() {
                     type="text"
                     id="assistantName"
                     name="assistantName"
-                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
                     placeholder="Ej: María, Alex"
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const value = e.target.value;
@@ -241,7 +316,7 @@ export default function AIConfig() {
                     as="select"
                     id="assistantGender"
                     name="assistantGender"
-                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                       const value = e.target.value;
                       setFieldValue('assistantGender', value);
@@ -265,32 +340,55 @@ export default function AIConfig() {
                     Personalidad<span className="text-red-500">*</span>
                   </label>
                   <p className="mt-1 text-sm text-gray-500">
-                    Define el estilo de comunicación y la personalidad de tu asistente
+                    Define el estilo de comunicación y la personalidad de tu asistente (selecciona hasta 3)
                   </p>
+                  {maxPersonalitiesError && (
+                    <p className="mt-2 text-sm text-brand-orange font-medium">
+                      Solo puedes seleccionar hasta 3 personalidades
+                    </p>
+                  )}
                   <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {personalityTraits.map(trait => (
                       <label
                         key={trait.value}
                         className={`relative flex cursor-pointer rounded-lg border p-4 shadow-sm focus:outline-none ${
-                          values.personality === trait.value
-                            ? 'border-indigo-500 ring-2 ring-indigo-500'
+                          values.personality.includes(trait.value)
+                            ? 'border-brand-purple ring-2 ring-brand-purple bg-gradient-to-r from-brand-purple/5 to-brand-orange/5'
                             : 'border-gray-300'
                         }`}
                       >
-                        <Field
-                          type="radio"
-                          name="personality"
+                        <input
+                          type="checkbox"
+                          name={`personality-${trait.value}`}
                           value={trait.value}
-                          className="sr-only"
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            const value = e.target.value;
-                            setFieldValue('personality', value);
-                            handleFieldChange('personality', value);
+                          checked={values.personality.includes(trait.value)}
+                          onChange={(e) => {
+                            const isChecked = e.target.checked;
+                            const value = trait.value;
+                            let newPersonality = [...values.personality];
+                            
+                            if (isChecked && newPersonality.length < 3) {
+                              // Agregar el valor si está marcado y hay menos de 3 seleccionados
+                              newPersonality.push(value);
+                              setMaxPersonalitiesError(false);
+                            } else if (isChecked && newPersonality.length >= 3) {
+                              // Si ya hay 3 seleccionados, mostrar mensaje de error
+                              setMaxPersonalitiesError(true);
+                              return;
+                            } else {
+                              // Eliminar el valor si está desmarcado
+                              newPersonality = newPersonality.filter(p => p !== value);
+                              setMaxPersonalitiesError(false);
+                            }
+                            
+                            setFieldValue('personality', newPersonality);
+                            handleFieldChange('personality', newPersonality);
                           }}
+                          className="h-4 w-4 mr-2 text-brand-purple border-gray-300 rounded focus:ring-brand-orange checked:bg-gradient-brand-reverse"
                         />
                         <span className="flex flex-1">
                           <span className="flex flex-col">
-                            <span className="block text-sm font-medium text-gray-900">
+                            <span className={`block text-sm font-medium ${values.personality.includes(trait.value) ? 'text-brand-purple' : 'text-gray-900'}`}>
                               {trait.label}
                             </span>
                           </span>
@@ -303,19 +401,18 @@ export default function AIConfig() {
                   )}
                 </div>
 
-                {values.personality === 'other' && (
+                {values.personality.includes('other') && (
                   <div>
                     <label htmlFor="otherPersonality" className="block text-sm font-medium text-gray-700">
-                      Describe la personalidad
+                      Describe la personalidad<span className="text-red-500">*</span>
                     </label>
                     <Field
-                      as="textarea"
+                      type="text"
                       id="otherPersonality"
                       name="otherPersonality"
-                      rows={3}
-                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                      placeholder="Describe el estilo de personalidad que deseas para tu asistente"
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
+                      placeholder="Describe la personalidad deseada..."
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                         const value = e.target.value;
                         setFieldValue('otherPersonality', value);
                         handleFieldChange('otherPersonality', value);
@@ -339,7 +436,7 @@ export default function AIConfig() {
                     id="additionalInfo"
                     name="additionalInfo"
                     rows={4}
-                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
                     placeholder="Ej: Preferencias específicas de comunicación, temas a evitar, etc."
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                       const value = e.target.value;
@@ -355,7 +452,7 @@ export default function AIConfig() {
               <button
                 type="button"
                 onClick={() => navigate('/onboarding/location-details')}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all"
+                className="btn-secondary"
               >
                 Atrás
               </button>
@@ -363,18 +460,14 @@ export default function AIConfig() {
                 <button
                   type="button"
                   onClick={() => handleSave(values)}
-                  className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all ${
-                    hasUnsavedChanges
-                      ? 'text-white bg-gradient-to-r from-[#2563eb] to-[#1d4ed8] hover:from-[#1d4ed8] hover:to-[#1e40af]'
-                      : 'text-gray-400 bg-gray-100 cursor-not-allowed'
-                  }`}
+                  className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
                   disabled={!hasUnsavedChanges}
                 >
                   {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-[#2563eb] to-[#1d4ed8] rounded-md shadow-sm hover:from-[#1d4ed8] hover:to-[#1e40af] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2563eb] transition-all"
+                  className="btn-primary"
                 >
                   Continuar
                 </button>

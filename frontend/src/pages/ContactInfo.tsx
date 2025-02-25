@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from '../hooks/useTranslation'
 import { useFormProgress } from '../hooks/useFormProgress'
@@ -83,6 +83,14 @@ const Notification = ({ message, onClose }: { message: string; onClose: () => vo
   );
 };
 
+// Extender la interfaz Window para incluir saveCurrentFormData
+declare global {
+  interface Window {
+    onFormStateChange?: (hasChanges: boolean) => void;
+    saveCurrentFormData?: () => Promise<boolean>;
+  }
+}
+
 export default function ContactInfo() {
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -130,6 +138,13 @@ export default function ContactInfo() {
     }
   }, [formData]);
 
+  // Comunicar cambios al componente padre
+  useEffect(() => {
+    if (window.onFormStateChange) {
+      window.onFormStateChange(hasUnsavedChanges);
+    }
+  }, [hasUnsavedChanges]);
+
   const handleFieldChange = (field: keyof FormValues, value: any) => {
     setHasUnsavedChanges(true)
     setLocalData(prev => ({ ...prev, [field]: value }))
@@ -144,12 +159,22 @@ export default function ContactInfo() {
     }
   }
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     await saveFormData()
     setHasUnsavedChanges(false)
     setShowNotification(true)
     setTimeout(() => setShowNotification(false), 3000)
-  }
+    return true; // Indicar que el guardado fue exitoso
+  }, [saveFormData, setHasUnsavedChanges, setShowNotification]);
+
+  // Exponer handleSave a través de window.saveCurrentFormData
+  useEffect(() => {
+    window.saveCurrentFormData = handleSave;
+    
+    return () => {
+      window.saveCurrentFormData = undefined;
+    };
+  }, [handleSave]);
 
   // Componente para el modal de confirmación
   const SavePrompt = () => {
@@ -176,9 +201,11 @@ export default function ContactInfo() {
             </button>
             <button
               onClick={async () => {
-                await handleSave()
-                setShowSavePrompt(false)
-                navigate('/onboarding/location-details')
+                const success = await handleSave();
+                if (success) {
+                  setShowSavePrompt(false)
+                  navigate('/onboarding/location-details')
+                }
               }}
               className="btn-primary"
             >

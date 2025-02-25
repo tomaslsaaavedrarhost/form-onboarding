@@ -287,7 +287,8 @@ interface FormState {
     otherLanguage: string
     assistantName: string
     assistantGender: string
-    personality: string
+    personality: string[]
+    otherPersonality?: string
     avatar: File | null
     additionalInfo: string
   }
@@ -342,7 +343,7 @@ const initialState: FormState = {
     otherLanguage: '',
     assistantName: '',
     assistantGender: '',
-    personality: '',
+    personality: [],
     avatar: null,
     additionalInfo: '',
   },
