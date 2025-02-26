@@ -4,7 +4,6 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { useTranslation } from '../../hooks/useTranslation'
 import UserProfile from '../UserProfile'
 import { useFormProgress } from '../../hooks/useFormProgress'
-import logo from '../../assets/unnamed.png'
 
 // Extender la interfaz Window para incluir nuestras propiedades personalizadas
 declare global {
@@ -175,7 +174,7 @@ export default function OnboardingLayout() {
             <div className="mx-auto max-w-7xl flex justify-between items-center">
               <div className="flex items-center">
                 <img 
-                  src={logo}
+                  src="/logo.png"
                   alt="RestoHost AI" 
                   className="h-12 w-auto"
                 />
