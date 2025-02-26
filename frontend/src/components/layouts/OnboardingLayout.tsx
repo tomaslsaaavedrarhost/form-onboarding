@@ -4,6 +4,7 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { useTranslation } from '../../hooks/useTranslation'
 import UserProfile from '../UserProfile'
 import { useFormProgress } from '../../hooks/useFormProgress'
+import logo from '../../assets/unnamed.png'
 
 // Extender la interfaz Window para incluir nuestras propiedades personalizadas
 declare global {
@@ -172,14 +173,12 @@ export default function OnboardingLayout() {
           {/* Header */}
           <header className="py-10">
             <div className="mx-auto max-w-7xl flex justify-between items-center">
-              <div className="relative">
-                {/* Rectángulo de gradiente */}
-                <div className="h-14 w-56 bg-gradient-brand rounded-sm"></div>
-                
-                {/* Texto "onboarding" superpuesto */}
-                <h1 className="absolute inset-0 flex items-center justify-center text-3xl font-bold tracking-tight text-white uppercase">
-                  onboarding
-                </h1>
+              <div className="flex items-center">
+                <img 
+                  src={logo}
+                  alt="RestoHost AI" 
+                  className="h-12 w-auto"
+                />
               </div>
               <UserProfile />
             </div>
