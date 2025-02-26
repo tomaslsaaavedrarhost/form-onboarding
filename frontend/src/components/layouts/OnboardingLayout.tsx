@@ -4,7 +4,7 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { useTranslation } from '../../hooks/useTranslation'
 import UserProfile from '../UserProfile'
 import { useFormProgress } from '../../hooks/useFormProgress'
-import logo from '../../assets/restohost-logo.svg'
+import logo from '../../assets/unnamed.png'
 
 // Extender la interfaz Window para incluir nuestras propiedades personalizadas
 declare global {
