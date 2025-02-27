@@ -320,7 +320,7 @@ export default function ContactInfo() {
 
             {/* Office Information Section */}
             <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-              <h3 className="text-lg font-medium text-gray-900">Dirección de Oficina Principal</h3>
+              <h3 className="text-lg font-medium text-gray-900">Dirección Legal de la LLC</h3>
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center">
@@ -328,7 +328,7 @@ export default function ContactInfo() {
                       Dirección
                     </label>
                     <InfoTooltip 
-                      text={`Ingresa la dirección de la oficina principal donde se gestionan las operaciones de ${getBusinessName()}.`}
+                      text={`Ingresa la dirección legal donde está registrada la LLC de ${getBusinessName()}. Esta debe ser la dirección oficial que aparece en los documentos de registro de la compañía.`}
                     />
                   </div>
                   <Field
@@ -353,7 +353,7 @@ export default function ContactInfo() {
                       <label htmlFor="city" className="form-label mb-0">
                         Ciudad
                       </label>
-                      <InfoTooltip text={`Ciudad donde se encuentra la oficina principal de ${getBusinessName()}.`} />
+                      <InfoTooltip text={`Ciudad donde está registrada legalmente la LLC de ${getBusinessName()}.`} />
                     </div>
                     <Field
                       type="text"
@@ -376,7 +376,7 @@ export default function ContactInfo() {
                       <label htmlFor="state" className="form-label mb-0">
                         Estado
                       </label>
-                      <InfoTooltip text={`Estado donde se encuentra la oficina principal de ${getBusinessName()}.`} />
+                      <InfoTooltip text={`Estado donde está registrada legalmente la LLC de ${getBusinessName()}.`} />
                     </div>
                     <Field
                       type="text"
@@ -399,7 +399,7 @@ export default function ContactInfo() {
                       <label htmlFor="zipCode" className="form-label mb-0">
                         Código Postal
                       </label>
-                      <InfoTooltip text={`Código postal de la oficina principal de ${getBusinessName()}.`} />
+                      <InfoTooltip text={`Código postal de la dirección legal donde está registrada la LLC de ${getBusinessName()}.`} />
                     </div>
                     <Field
                       type="text"

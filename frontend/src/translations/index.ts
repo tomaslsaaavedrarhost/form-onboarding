@@ -236,7 +236,7 @@ export const translations: Translations = {
   },
   es: {
     // Page Titles
-    "onboardingTitle": "Registro",
+    "onboardingTitle": "",
     "legalDataTitle": "Información Legal y Administrativa",
     "contactInfoTitle": "Información de Contacto",
     "locationDetailsTitle": "Detalles de Ubicación",
