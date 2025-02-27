@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Formik, Form, Field, FieldArray } from 'formik'
 import * as Yup from 'yup'
@@ -479,6 +479,7 @@ const LocationDetails: React.FC = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
+  const formikRef = useRef<any>(null);
 
   // Effect to automatically set selectedLocationName based on the confirmed locations
   useEffect(() => {
@@ -565,32 +566,52 @@ const LocationDetails: React.FC = () => {
         }
       }));
 
-      await dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails });
-      await saveFormData();
-      setHasUnsavedChanges(false);
-      setShowNotification(true);
-      setTimeout(() => setShowNotification(false), 3000);
-      return true; // Indicar que el guardado fue exitoso
+      // Asegurarnos que los datos sean válidos
+      if (!locationDetails || locationDetails.length === 0) {
+        console.error('No hay datos de ubicación para guardar');
+        return false;
+      }
+
+      // Actualizar el contexto con los datos actuales
+      dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails });
+      
+      // Guardar en la base de datos
+      const saveResult = await saveFormData();
+      
+      if (saveResult) {
+        setHasUnsavedChanges(false);
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+        return true; // Indicar que el guardado fue exitoso
+      } else {
+        console.error('Error al guardar en la base de datos');
+        return false;
+      }
     } catch (error) {
       console.error('Error al guardar los detalles:', error);
       return false;
     }
-  }, [dispatch, saveFormData, setHasUnsavedChanges, setShowNotification]);
+  }, [dispatch, saveFormData]);
 
   // Exponer handleSave a través de window.saveCurrentFormData
   useEffect(() => {
-    // Necesitamos una función que capture los valores actuales
+    // Crear una función que capture la referencia actual al formulario y obtenga sus valores
     window.saveCurrentFormData = async () => {
-      // Obtenemos los valores actuales del formulario
-      const formikContext = document.querySelector('form')?.getAttribute('data-formik-values');
-      if (formikContext) {
+      console.log('window.saveCurrentFormData llamado');
+      if (formikRef.current) {
+        console.log('formikRef está disponible');
         try {
-          const values = JSON.parse(formikContext);
-          return await handleSave(values);
+          const values = formikRef.current.values;
+          console.log('Valores del formulario obtenidos:', values);
+          const result = await handleSave(values);
+          console.log('Resultado de handleSave:', result);
+          return result;
         } catch (e) {
-          console.error('Error al parsear los valores del formulario:', e);
+          console.error('Error al guardar los valores del formulario:', e);
           return false;
         }
+      } else {
+        console.error('formikRef no está disponible');
       }
       return false;
     };
@@ -632,22 +653,6 @@ const LocationDetails: React.FC = () => {
             <button
               onClick={async () => {
                 try {
-                  // Guardamos primero los valores actuales en el contexto
-                  const locationDetails = values.locationDetails.map((location: any) => ({
-                    ...location,
-                    phoneNumbers: location.phoneNumbers || [],
-                    acceptedPaymentMethods: location.acceptedPaymentMethods || [],
-                    parking: {
-                      hasParking: location.parking?.hasParking || false,
-                      parkingType: location.parking?.parkingType,
-                      pricingDetails: location.parking?.pricingDetails || '',
-                      location: location.parking?.location || ''
-                    }
-                  }));
-                  
-                  await dispatch({ type: 'SET_LOCATION_DETAILS', payload: locationDetails });
-                  
-                  // Usamos handleSave directamente con los valores actuales
                   const success = await handleSave(values);
                   
                   if (success) {
@@ -655,10 +660,11 @@ const LocationDetails: React.FC = () => {
                     setHasUnsavedChanges(false);
                     navigate('/onboarding/ai-config', { replace: true });
                   } else {
-                    console.error('No se pudo guardar los datos de ubicación');
+                    alert('Error al guardar los datos. Por favor intenta de nuevo.');
                   }
                 } catch (e) {
                   console.error('Error al guardar los datos:', e);
+                  alert('Error al guardar los datos. Por favor intenta de nuevo.');
                 }
               }}
               className="btn-primary"
@@ -699,6 +705,7 @@ const LocationDetails: React.FC = () => {
         }}
         enableReinitialize={true}
         validationSchema={validationSchema}
+        innerRef={formikRef}
         onSubmit={handleNext}
       >
         {({ values, setFieldValue }) => (

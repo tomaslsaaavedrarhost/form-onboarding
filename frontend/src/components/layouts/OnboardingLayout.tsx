@@ -117,7 +117,9 @@ export default function OnboardingLayout() {
                   // Intentar guardar los datos del formulario actual si existe la función
                   if (typeof window.saveCurrentFormData === 'function') {
                     try {
+                      console.log('Llamando a window.saveCurrentFormData desde SavePrompt');
                       success = await window.saveCurrentFormData();
+                      console.log('Resultado de window.saveCurrentFormData:', success);
                       if (!success) {
                         console.error('Error al guardar los datos del formulario con saveCurrentFormData');
                         alert('Error al guardar los datos del formulario. Por favor intenta de nuevo.');
