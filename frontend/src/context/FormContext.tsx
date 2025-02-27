@@ -248,6 +248,66 @@ export interface LocationDetail {
     acceptedDocuments: string[]
     otherDocuments: string
   }
+  alcoholPolicy: {
+    bottlesToGo: {
+      allowed: 'yes' | 'no' | 'depends'
+      details: string
+    }
+    pickupDelivery: {
+      policy: 'both' | 'pickup_only' | 'none' | 'depends'
+      details: string
+    }
+  }
+  accessibility: {
+    hasHighChairs: boolean
+    hasWheelchairRamps: boolean
+    hasAccessibleRestrooms: boolean
+    hasAccessibleParking: boolean
+    hasAccessibleEntrance: boolean
+    additionalFeatures: string
+  }
+  petPolicy: {
+    isPetFriendly: boolean
+    petRestrictions: string
+    serviceAnimalsOnly: boolean
+  }
+  privateEvents: {
+    allowsPrivateEvents: boolean
+    privateEventContact: {
+      name: string
+      phone: string
+      email: string
+    }
+    privateEventSpaces: string[]
+    minimumSpend: string
+    maximumCapacity: string
+    advanceBookingRequired: string
+  }
+  giftCards: {
+    offersGiftCards: boolean
+    giftCardTypes: string[]
+    digitalGiftCards: boolean
+    physicalGiftCards: boolean
+    giftCardPurchaseOptions: string[]
+    giftCardRedemptionProcess: string
+    giftCardSystem: string
+  }
+  loyaltyProgram: {
+    hasLoyaltyProgram: boolean
+    loyaltyProgramName: string
+    loyaltyProgramDetails: string
+    loyaltyProgramEnrollment: string
+  }
+  restaurantTechnology: {
+    hasOwnApp: boolean
+    appName: string
+    appPlatforms: string[]
+    appFeatures: string[]
+    hasSelfCheckoutKiosks: boolean
+    kioskDetails: string
+    hasTableSideOrdering: boolean
+    tableSideOrderingDetails: string
+  }
   smokingArea: {
     hasSmokingArea: boolean
     details: string

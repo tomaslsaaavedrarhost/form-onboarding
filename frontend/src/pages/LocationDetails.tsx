@@ -274,6 +274,24 @@ const validationSchema = Yup.object().shape({
       phoneNumbers: Yup.array().of(Yup.string()).min(1, 'required'),
       acceptedPaymentMethods: Yup.array().of(Yup.string()).min(1, 'required'),
       phoneCarrier: Yup.string().required('required'),
+      alcoholPolicy: Yup.object().shape({
+        bottlesToGo: Yup.object().shape({
+          allowed: Yup.string().oneOf(['yes', 'no', 'depends']).required('required'),
+          details: Yup.string().when('allowed', {
+            is: (val: string) => val === 'depends',
+            then: () => Yup.string().required('required'),
+            otherwise: () => Yup.string()
+          })
+        }),
+        pickupDelivery: Yup.object().shape({
+          policy: Yup.string().oneOf(['both', 'pickup_only', 'none', 'depends']).required('required'),
+          details: Yup.string().when('policy', {
+            is: (val: string) => val === 'depends',
+            then: () => Yup.string().required('required'),
+            otherwise: () => Yup.string()
+          })
+        })
+      }),
       schedule: Yup.object().shape(
         DAYS_OF_WEEK.reduce((acc, day) => ({
           ...acc,
@@ -340,6 +358,96 @@ const validationSchema = Yup.object().shape({
         location: Yup.string().when('hasParking', {
           is: true,
           then: () => Yup.string().required('required')
+        })
+      }),
+      accessibility: Yup.object().shape({
+        hasHighChairs: Yup.boolean(),
+        hasWheelchairRamps: Yup.boolean(),
+        hasAccessibleRestrooms: Yup.boolean(),
+        hasAccessibleParking: Yup.boolean(),
+        hasAccessibleEntrance: Yup.boolean(),
+        additionalFeatures: Yup.string()
+      }),
+      petPolicy: Yup.object().shape({
+        isPetFriendly: Yup.boolean(),
+        petRestrictions: Yup.string().when('isPetFriendly', {
+          is: true,
+          then: (schema) => schema.required('Please specify pet restrictions'),
+          otherwise: (schema) => schema.notRequired()
+        }),
+        serviceAnimalsOnly: Yup.boolean()
+      }),
+      privateEvents: Yup.object().shape({
+        allowsPrivateEvents: Yup.boolean(),
+        privateEventContact: Yup.object().shape({
+          name: Yup.string().when(['..allowsPrivateEvents'], {
+            is: true,
+            then: (schema) => schema.required('Contact name is required'),
+            otherwise: (schema) => schema.notRequired()
+          }),
+          phone: Yup.string().when(['..allowsPrivateEvents'], {
+            is: true,
+            then: (schema) => schema.required('Contact phone is required'),
+            otherwise: (schema) => schema.notRequired()
+          }),
+          email: Yup.string().email('Invalid email').when(['..allowsPrivateEvents'], {
+            is: true,
+            then: (schema) => schema.required('Contact email is required'),
+            otherwise: (schema) => schema.notRequired()
+          })
+        }),
+        privateEventSpaces: Yup.array().of(Yup.string()),
+        minimumSpend: Yup.string(),
+        maximumCapacity: Yup.string(),
+        advanceBookingRequired: Yup.string()
+      }),
+      giftCards: Yup.object().shape({
+        offersGiftCards: Yup.boolean(),
+        giftCardTypes: Yup.array().of(Yup.string()),
+        digitalGiftCards: Yup.boolean(),
+        physicalGiftCards: Yup.boolean(),
+        giftCardPurchaseOptions: Yup.array().of(Yup.string()),
+        giftCardRedemptionProcess: Yup.string().when('offersGiftCards', {
+          is: true,
+          then: (schema) => schema,
+          otherwise: (schema) => schema.notRequired()
+        }),
+        giftCardSystem: Yup.string().when('offersGiftCards', {
+          is: true,
+          then: (schema) => schema,
+          otherwise: (schema) => schema.notRequired()
+        })
+      }),
+      loyaltyProgram: Yup.object().shape({
+        hasLoyaltyProgram: Yup.boolean(),
+        loyaltyProgramName: Yup.string().when('hasLoyaltyProgram', {
+          is: true,
+          then: (schema) => schema.required('Loyalty program name is required'),
+          otherwise: (schema) => schema.notRequired()
+        }),
+        loyaltyProgramDetails: Yup.string(),
+        loyaltyProgramEnrollment: Yup.string()
+      }),
+      restaurantTechnology: Yup.object().shape({
+        hasOwnApp: Yup.boolean(),
+        appName: Yup.string().when('hasOwnApp', {
+          is: true,
+          then: (schema) => schema.required('App name is required'),
+          otherwise: (schema) => schema.notRequired()
+        }),
+        appPlatforms: Yup.array().of(Yup.string()),
+        appFeatures: Yup.array().of(Yup.string()),
+        hasSelfCheckoutKiosks: Yup.boolean(),
+        kioskDetails: Yup.string().when('hasSelfCheckoutKiosks', {
+          is: true,
+          then: (schema) => schema,
+          otherwise: (schema) => schema.notRequired()
+        }),
+        hasTableSideOrdering: Yup.boolean(),
+        tableSideOrderingDetails: Yup.string().when('hasTableSideOrdering', {
+          is: true,
+          then: (schema) => schema,
+          otherwise: (schema) => schema.notRequired()
         })
       })
     })
@@ -1722,54 +1830,205 @@ const LocationDetails: React.FC = () => {
                       )}
                     </div>
 
-                    <SectionTitle>Age Verification</SectionTitle>
-                    <div className="space-y-4">
-                      <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Select which forms of identification are accepted for age verification
-                      </p>
-                      <div className="space-y-2">
-                        {AGE_VERIFICATION_DOCUMENTS.map(doc => (
-                          <div key={doc} className="flex items-center">
-                            <Field
-                              type="checkbox"
-                              name={`locationDetails.${index}.ageVerification.acceptedDocuments`}
-                              value={doc}
-                              checked={values.locationDetails[index].ageVerification.acceptedDocuments.includes(doc)}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                                const currentDocs = [...values.locationDetails[index].ageVerification.acceptedDocuments];
-                                if (e.target.checked) {
-                                  currentDocs.push(doc);
-                                } else {
-                                  const idx = currentDocs.indexOf(doc);
-                                  if (idx > -1) {
-                                    currentDocs.splice(idx, 1);
-                                  }
-                                }
-                                handleFieldChange(setFieldValue, `locationDetails.${index}.ageVerification.acceptedDocuments`, currentDocs);
-                              }}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                            />
-                            <label className="ml-2 text-sm text-gray-700">
-                              {doc.replace(/_/g, ' ')}
+                    <SectionTitle>Alcohol Policy & Age Verification</SectionTitle>
+                    <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+                      <div className="border-b border-gray-200 pb-5">
+                        <h3 className="text-lg font-medium text-gray-900">Alcohol Service Policies</h3>
+                        <p className="mt-2 text-sm text-gray-500">
+                          Provide details about your establishment's alcohol policies to avoid confusion with customers
+                        </p>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-gray-50 p-5 rounded-lg">
+                          <label className="block text-sm font-medium text-gray-700 mb-3">
+                            Can a customer take home an unfinished bottle of alcohol they ordered at the restaurant?
+                          </label>
+                          <div className="space-y-3">
+                            <label className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors">
+                              <Field
+                                type="radio"
+                                name={`locationDetails.${index}.alcoholPolicy.bottlesToGo.allowed`}
+                                value="yes"
+                                checked={values.locationDetails[index].alcoholPolicy.bottlesToGo.allowed === 'yes'}
+                                onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.bottlesToGo.allowed`, 'yes')}
+                                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                              />
+                              <span className="ml-3 text-sm text-gray-700">
+                                Yes, as long as it is placed in a sealed bag/container
+                              </span>
+                            </label>
+                            
+                            <label className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors">
+                              <Field
+                                type="radio"
+                                name={`locationDetails.${index}.alcoholPolicy.bottlesToGo.allowed`}
+                                value="no"
+                                checked={values.locationDetails[index].alcoholPolicy.bottlesToGo.allowed === 'no'}
+                                onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.bottlesToGo.allowed`, 'no')}
+                                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                              />
+                              <span className="ml-3 text-sm text-gray-700">
+                                No, we do not allow customers to take alcohol to go
+                              </span>
+                            </label>
+                            
+                            <label className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors">
+                              <Field
+                                type="radio"
+                                name={`locationDetails.${index}.alcoholPolicy.bottlesToGo.allowed`}
+                                value="depends"
+                                checked={values.locationDetails[index].alcoholPolicy.bottlesToGo.allowed === 'depends'}
+                                onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.bottlesToGo.allowed`, 'depends')}
+                                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                              />
+                              <span className="ml-3 text-sm text-gray-700">
+                                It depends (please explain)
+                              </span>
                             </label>
                           </div>
-                        ))}
-                      </div>
-
-                      {values.locationDetails[index].ageVerification.acceptedDocuments.includes('OTHER') && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">
-                            Other Accepted Documents
-                          </label>
-                          <Field
-                            type="text"
-                            name={`locationDetails.${index}.ageVerification.otherDocuments`}
-                            placeholder="Specify other accepted forms of ID"
-                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.ageVerification.otherDocuments`, e.target.value)}
-                          />
+                          
+                          {values.locationDetails[index].alcoholPolicy.bottlesToGo.allowed === 'depends' && (
+                            <div className="mt-4 pl-8">
+                              <Field
+                                as="textarea"
+                                name={`locationDetails.${index}.alcoholPolicy.bottlesToGo.details`}
+                                placeholder="Enter details about your policy on unfinished bottles..."
+                                className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                rows={3}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.bottlesToGo.details`, e.target.value)}
+                              />
+                            </div>
+                          )}
                         </div>
-                      )}
+                        
+                        <div className="bg-gray-50 p-5 rounded-lg">
+                          <label className="block text-sm font-medium text-gray-700 mb-3">
+                            Do you allow alcohol sales for pickup or delivery orders?
+                          </label>
+                          <div className="space-y-3">
+                            <label className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors">
+                              <Field
+                                type="radio"
+                                name={`locationDetails.${index}.alcoholPolicy.pickupDelivery.policy`}
+                                value="both"
+                                checked={values.locationDetails[index].alcoholPolicy.pickupDelivery.policy === 'both'}
+                                onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.pickupDelivery.policy`, 'both')}
+                                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                              />
+                              <span className="ml-3 text-sm text-gray-700">
+                                Yes, customers can order alcohol for pickup and delivery
+                              </span>
+                            </label>
+                            
+                            <label className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors">
+                              <Field
+                                type="radio"
+                                name={`locationDetails.${index}.alcoholPolicy.pickupDelivery.policy`}
+                                value="pickup_only"
+                                checked={values.locationDetails[index].alcoholPolicy.pickupDelivery.policy === 'pickup_only'}
+                                onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.pickupDelivery.policy`, 'pickup_only')}
+                                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                              />
+                              <span className="ml-3 text-sm text-gray-700">
+                                Only for pickup, not for delivery
+                              </span>
+                            </label>
+                            
+                            <label className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors">
+                              <Field
+                                type="radio"
+                                name={`locationDetails.${index}.alcoholPolicy.pickupDelivery.policy`}
+                                value="none"
+                                checked={values.locationDetails[index].alcoholPolicy.pickupDelivery.policy === 'none'}
+                                onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.pickupDelivery.policy`, 'none')}
+                                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                              />
+                              <span className="ml-3 text-sm text-gray-700">
+                                No, we do not sell alcohol for pickup or delivery
+                              </span>
+                            </label>
+                            
+                            <label className="flex items-center p-2 rounded-md hover:bg-gray-100 transition-colors">
+                              <Field
+                                type="radio"
+                                name={`locationDetails.${index}.alcoholPolicy.pickupDelivery.policy`}
+                                value="depends"
+                                checked={values.locationDetails[index].alcoholPolicy.pickupDelivery.policy === 'depends'}
+                                onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.pickupDelivery.policy`, 'depends')}
+                                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                              />
+                              <span className="ml-3 text-sm text-gray-700">
+                                It depends (please explain)
+                              </span>
+                            </label>
+                          </div>
+                          
+                          {values.locationDetails[index].alcoholPolicy.pickupDelivery.policy === 'depends' && (
+                            <div className="mt-4 pl-8">
+                              <Field
+                                as="textarea"
+                                name={`locationDetails.${index}.alcoholPolicy.pickupDelivery.details`}
+                                placeholder="Enter details about your policy on alcohol for pickup/delivery..."
+                                className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                rows={3}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.alcoholPolicy.pickupDelivery.details`, e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="border-t border-gray-200 pt-5 mt-6">
+                        <h3 className="text-lg font-medium text-gray-900 mb-3">Age Verification Requirements</h3>
+                        <p className="mb-4 text-sm text-gray-500">
+                          Select which forms of identification are accepted for alcohol purchases
+                        </p>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+                          {AGE_VERIFICATION_DOCUMENTS.map(doc => (
+                            <div key={doc} className="flex items-center bg-gray-50 p-3 rounded-md hover:bg-gray-100 transition-colors">
+                              <Field
+                                type="checkbox"
+                                name={`locationDetails.${index}.ageVerification.acceptedDocuments`}
+                                value={doc}
+                                checked={values.locationDetails[index].ageVerification.acceptedDocuments.includes(doc)}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                  const currentDocs = [...values.locationDetails[index].ageVerification.acceptedDocuments];
+                                  if (e.target.checked) {
+                                    currentDocs.push(doc);
+                                  } else {
+                                    const idx = currentDocs.indexOf(doc);
+                                    if (idx > -1) {
+                                      currentDocs.splice(idx, 1);
+                                    }
+                                  }
+                                  handleFieldChange(setFieldValue, `locationDetails.${index}.ageVerification.acceptedDocuments`, currentDocs);
+                                }}
+                                className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                              />
+                              <label className="ml-3 text-sm text-gray-700 flex-1">
+                                {doc.replace(/_/g, ' ')}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+
+                        {values.locationDetails[index].ageVerification.acceptedDocuments.includes('OTHER') && (
+                          <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Other Accepted Documents
+                            </label>
+                            <Field
+                              type="text"
+                              name={`locationDetails.${index}.ageVerification.otherDocuments`}
+                              placeholder="Specify other accepted forms of ID"
+                              className="block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.ageVerification.otherDocuments`, e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <SectionTitle>Smoking Area</SectionTitle>
@@ -2117,6 +2376,379 @@ const LocationDetails: React.FC = () => {
                           </>
                         )}
                       </div>
+                    </div>
+
+                    <SectionTitle>Accessibility</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify any additional features or accommodations for customers with disabilities
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.accessibility.hasHighChairs`}
+                            checked={values.locationDetails[index].accessibility.hasHighChairs === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasHighChairs`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">High chairs available</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.accessibility.hasWheelchairRamps`}
+                            checked={values.locationDetails[index].accessibility.hasWheelchairRamps === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasWheelchairRamps`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Wheelchair ramps available</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.accessibility.hasAccessibleRestrooms`}
+                            checked={values.locationDetails[index].accessibility.hasAccessibleRestrooms === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleRestrooms`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Accessible restrooms available</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.accessibility.hasAccessibleParking`}
+                            checked={values.locationDetails[index].accessibility.hasAccessibleParking === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleParking`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Accessible parking available</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.accessibility.hasAccessibleEntrance`}
+                            checked={values.locationDetails[index].accessibility.hasAccessibleEntrance === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleEntrance`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Accessible entrance available</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].accessibility.additionalFeatures && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Additional Features
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.accessibility.additionalFeatures`}
+                            placeholder="e.g., Braille signage, hearing loop"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.additionalFeatures`, e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Pet Policy</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify your pet policy for customers with pets
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.petPolicy.isPetFriendly`}
+                            checked={values.locationDetails[index].petPolicy.isPetFriendly === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.petPolicy.isPetFriendly`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Pet-friendly</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.petPolicy.serviceAnimalsOnly`}
+                            checked={values.locationDetails[index].petPolicy.serviceAnimalsOnly === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.petPolicy.serviceAnimalsOnly`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Service animals only</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].petPolicy.isPetFriendly && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Pet Restrictions
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.petPolicy.petRestrictions`}
+                            placeholder="e.g., No pets allowed on the premises"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.petPolicy.petRestrictions`, e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Private Events</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify your policy for private events and any special arrangements available
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.privateEvents.allowsPrivateEvents`}
+                            checked={values.locationDetails[index].privateEvents.allowsPrivateEvents === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.privateEvents.allowsPrivateEvents`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Private events allowed</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].privateEvents.allowsPrivateEvents && (
+                        <div>
+                          <FieldArray name={`locationDetails.${index}.privateEvents.privateEventSpaces`}>
+                            {({ push, remove }) => (
+                              <div className="space-y-2">
+                                {values.locationDetails[index].privateEvents.privateEventSpaces.map((space: string, spaceIndex: number) => (
+                                  <div key={spaceIndex} className="flex gap-2">
+                                    <Field
+                                      type="text"
+                                      name={`locationDetails.${index}.privateEvents.privateEventSpaces.${spaceIndex}`}
+                                      placeholder="e.g., Private dining room, outdoor patio"
+                                      className="flex-1 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.privateEvents.privateEventSpaces.${spaceIndex}`, e.target.value)}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => remove(spaceIndex)}
+                                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => push('')}
+                                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
+                                >
+                                  Add Private Event Space
+                                </button>
+                              </div>
+                            )}
+                          </FieldArray>
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Gift Cards</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify your gift card policy and any special arrangements available
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.giftCards.offersGiftCards`}
+                            checked={values.locationDetails[index].giftCards.offersGiftCards === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.offersGiftCards`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Gift cards available</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.giftCards.digitalGiftCards`}
+                            checked={values.locationDetails[index].giftCards.digitalGiftCards === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.digitalGiftCards`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Digital gift cards available</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.giftCards.physicalGiftCards`}
+                            checked={values.locationDetails[index].giftCards.physicalGiftCards === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.physicalGiftCards`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Physical gift cards available</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].giftCards.offersGiftCards && (
+                        <div>
+                          <FieldArray name={`locationDetails.${index}.giftCards.giftCardTypes`}>
+                            {({ push, remove }) => (
+                              <div className="space-y-2">
+                                {values.locationDetails[index].giftCards.giftCardTypes.map((type: string, typeIndex: number) => (
+                                  <div key={typeIndex} className="flex gap-2">
+                                    <Field
+                                      type="text"
+                                      name={`locationDetails.${index}.giftCards.giftCardTypes.${typeIndex}`}
+                                      placeholder="e.g., $25 gift card"
+                                      className="flex-1 rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.giftCardTypes.${typeIndex}`, e.target.value)}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => remove(typeIndex)}
+                                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => push('')}
+                                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
+                                >
+                                  Add Gift Card Type
+                                </button>
+                              </div>
+                            )}
+                          </FieldArray>
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Loyalty Program</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify your loyalty program policy and any special arrangements available
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.loyaltyProgram.hasLoyaltyProgram`}
+                            checked={values.locationDetails[index].loyaltyProgram.hasLoyaltyProgram === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.loyaltyProgram.hasLoyaltyProgram`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Loyalty program available</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].loyaltyProgram.hasLoyaltyProgram && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Loyalty Program Name
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.loyaltyProgram.loyaltyProgramName`}
+                            placeholder="e.g., Rewards Club"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.loyaltyProgram.loyaltyProgramName`, e.target.value)}
+                          />
+                          
+                          <label className="block text-sm font-medium text-gray-700 mt-4">
+                            Loyalty Program Details
+                          </label>
+                          <Field
+                            as="textarea"
+                            name={`locationDetails.${index}.loyaltyProgram.loyaltyProgramDetails`}
+                            placeholder="Describe how the loyalty program works"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.loyaltyProgram.loyaltyProgramDetails`, e.target.value)}
+                          />
+                          
+                          <label className="block text-sm font-medium text-gray-700 mt-4">
+                            Loyalty Program Enrollment
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.loyaltyProgram.loyaltyProgramEnrollment`}
+                            placeholder="e.g., Sign up at the restaurant or online"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.loyaltyProgram.loyaltyProgramEnrollment`, e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <SectionTitle>Restaurant Technology</SectionTitle>
+                    <div className="space-y-4">
+                      <p className="mt-1 mb-4 text-sm text-gray-500">
+                        Specify any special arrangements or technology features available at your restaurant
+                      </p>
+                      <div className="flex items-center space-x-4">
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.restaurantTechnology.hasOwnApp`}
+                            checked={values.locationDetails[index].restaurantTechnology.hasOwnApp === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasOwnApp`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Own app available</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.restaurantTechnology.hasTableSideOrdering`}
+                            checked={values.locationDetails[index].restaurantTechnology.hasTableSideOrdering === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasTableSideOrdering`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Table side ordering available</span>
+                        </label>
+                        <label className="inline-flex items-center">
+                          <Field
+                            type="checkbox"
+                            name={`locationDetails.${index}.restaurantTechnology.hasSelfCheckoutKiosks`}
+                            checked={values.locationDetails[index].restaurantTechnology.hasSelfCheckoutKiosks === true}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasSelfCheckoutKiosks`, true)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Self-checkout kiosks available</span>
+                        </label>
+                      </div>
+
+                      {values.locationDetails[index].restaurantTechnology.hasOwnApp && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            App Name
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.restaurantTechnology.appName`}
+                            placeholder="e.g., MyRestaurantApp"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.appName`, e.target.value)}
+                          />
+                        </div>
+                      )}
+
+                      {values.locationDetails[index].restaurantTechnology.hasTableSideOrdering && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Table Side Ordering Details
+                          </label>
+                          <Field
+                            type="text"
+                            name={`locationDetails.${index}.restaurantTechnology.tableSideOrderingDetails`}
+                            placeholder="e.g., Table side ordering available on app"
+                            className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.tableSideOrderingDetails`, e.target.value)}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

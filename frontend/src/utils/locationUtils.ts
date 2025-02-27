@@ -113,6 +113,66 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
     acceptedDocuments: [],
     otherDocuments: ''
   },
+  alcoholPolicy: {
+    bottlesToGo: {
+      allowed: 'no',
+      details: ''
+    },
+    pickupDelivery: {
+      policy: 'none',
+      details: ''
+    }
+  },
+  accessibility: {
+    hasHighChairs: false,
+    hasWheelchairRamps: false,
+    hasAccessibleRestrooms: false,
+    hasAccessibleParking: false,
+    hasAccessibleEntrance: false,
+    additionalFeatures: ''
+  },
+  petPolicy: {
+    isPetFriendly: false,
+    petRestrictions: '',
+    serviceAnimalsOnly: true
+  },
+  privateEvents: {
+    allowsPrivateEvents: false,
+    privateEventContact: {
+      name: '',
+      phone: '',
+      email: ''
+    },
+    privateEventSpaces: [],
+    minimumSpend: '',
+    maximumCapacity: '',
+    advanceBookingRequired: ''
+  },
+  giftCards: {
+    offersGiftCards: false,
+    giftCardTypes: [],
+    digitalGiftCards: false,
+    physicalGiftCards: false,
+    giftCardPurchaseOptions: [],
+    giftCardRedemptionProcess: '',
+    giftCardSystem: ''
+  },
+  loyaltyProgram: {
+    hasLoyaltyProgram: false,
+    loyaltyProgramName: '',
+    loyaltyProgramDetails: '',
+    loyaltyProgramEnrollment: ''
+  },
+  restaurantTechnology: {
+    hasOwnApp: false,
+    appName: '',
+    appPlatforms: [],
+    appFeatures: [],
+    hasSelfCheckoutKiosks: false,
+    kioskDetails: '',
+    hasTableSideOrdering: false,
+    tableSideOrderingDetails: ''
+  },
   smokingArea: {
     hasSmokingArea: false,
     details: ''
