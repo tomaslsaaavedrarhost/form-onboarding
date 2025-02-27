@@ -89,6 +89,7 @@ const PHONE_CARRIERS = [
   'VERIZON WIRELESS',
   'AT&T MOBILITY',
   'T-MOBILE USA',
+  'COMCAST',
   'SPRINT CORPORATION',
   'OTHER'
 ] as const
@@ -709,7 +710,7 @@ const LocationDetails: React.FC = () => {
                     <SectionTitle>Contact Phone Numbers</SectionTitle>
                     <div className="space-y-4">
                       <p className="mt-1 mb-4 text-sm text-gray-500">
-                        Add all phone numbers that customers can use to contact this location
+                        Add all phone numbers that customers can use to contact this location. For example the phone number that you set on Google My Business.
                       </p>
                       <FieldArray name={`locationDetails.${index}.phoneNumbers`}>
                         {({ push, remove }) => (
@@ -1113,6 +1114,7 @@ const LocationDetails: React.FC = () => {
                                               <option value="lunch">Lunch</option>
                                               <option value="dinner">Dinner</option>
                                               <option value="brunch">Brunch</option>
+                                              <option value="breakfast">Breakfast</option>
                                               <option value="all-day">All Day</option>
                                               <option value="break">Break/Closed Period</option>
                                             </Field>
@@ -1297,7 +1299,7 @@ const LocationDetails: React.FC = () => {
                             onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.hasParking`, true)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
                           />
-                          <span className="ml-2 text-sm text-gray-700">Has Parking</span>
+                          <span className="ml-2 text-sm text-gray-700">Parking Available</span>
                         </label>
                         <label className="inline-flex items-center">
                           <Field
@@ -1308,7 +1310,7 @@ const LocationDetails: React.FC = () => {
                             onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.hasParking`, false)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
                           />
-                          <span className="ml-2 text-sm text-gray-700">No Parking</span>
+                          <span className="ml-2 text-sm text-gray-700">No Parking available</span>
                         </label>
                       </div>
 
@@ -1366,7 +1368,7 @@ const LocationDetails: React.FC = () => {
                             <Field
                               type="text"
                               name={`locationDetails.${index}.parking.location`}
-                              placeholder="e.g., Behind the restaurant, Street parking available"
+                              placeholder="Please refer to it as if you were the host... e.g. Behind the corner, just by the beach..."
                               className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                               onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.parking.location`, e.target.value)}
                             />
@@ -1503,7 +1505,7 @@ const LocationDetails: React.FC = () => {
                             onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.birthdayCelebrations.allowed`, true)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
                           />
-                          <span className="ml-2 text-sm text-gray-700">Birthday celebrations allowed</span>
+                          <span className="ml-2 text-sm text-gray-700">Special arrangements available</span>
                         </label>
                         <label className="inline-flex items-center">
                           <Field
@@ -1514,7 +1516,7 @@ const LocationDetails: React.FC = () => {
                             onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.birthdayCelebrations.allowed`, false)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
                           />
-                          <span className="ml-2 text-sm text-gray-700">Not allowed</span>
+                          <span className="ml-2 text-sm text-gray-700">No special arrangements</span>
                         </label>
                       </div>
 
@@ -1527,7 +1529,7 @@ const LocationDetails: React.FC = () => {
                             <Field
                               as="textarea"
                               name={`locationDetails.${index}.birthdayCelebrations.details`}
-                              placeholder="e.g., Complimentary dessert, special song performance, etc."
+                              placeholder="e.g., Complimentary dessert, special song performance, sparklers, candles etc."
                               className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.birthdayCelebrations.details`, e.target.value)}
                             />
