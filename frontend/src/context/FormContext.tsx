@@ -141,6 +141,7 @@ export interface LocationDetail {
   streetAddress: string
   timeZone: string
   managerEmail: string
+  additionalEmails: string[]
   phoneNumbers: string[]
   acceptedPaymentMethods: string[]
   creditCardExclusions: string

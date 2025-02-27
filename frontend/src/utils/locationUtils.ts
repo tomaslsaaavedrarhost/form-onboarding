@@ -20,6 +20,7 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
   streetAddress: '',
   timeZone: '',
   managerEmail: '',
+  additionalEmails: [],
   phoneNumbers: [],
   acceptedPaymentMethods: [],
   creditCardExclusions: '',

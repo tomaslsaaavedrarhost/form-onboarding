@@ -268,6 +268,9 @@ const validationSchema = Yup.object().shape({
       streetAddress: Yup.string().required('required'),
       timeZone: Yup.string().required('required'),
       managerEmail: Yup.string().email('invalidEmail').required('required'),
+      additionalEmails: Yup.array().of(
+        Yup.string().email('invalidEmail')
+      ),
       phoneNumbers: Yup.array().of(Yup.string()).min(1, 'required'),
       acceptedPaymentMethods: Yup.array().of(Yup.string()).min(1, 'required'),
       phoneCarrier: Yup.string().required('required'),
@@ -695,7 +698,7 @@ const LocationDetails: React.FC = () => {
                           Manager's Email Address
                         </label>
                         <p className="mt-1 text-sm text-gray-500">
-                          This email will receive important notifications and customer support requests
+                          This primary email will receive important notifications and customer support requests filled out by clients, which are sent by AI through text messaging.
                         </p>
                         <Field
                           type="email"
@@ -704,6 +707,65 @@ const LocationDetails: React.FC = () => {
                           className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.managerEmail`, e.target.value)}
                         />
+                        
+                        <div className="mt-4">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Additional Recipients (CC)
+                          </label>
+                          <p className="mt-1 text-sm text-gray-500">
+                            Add additional email addresses that will be copied on all communications. These emails will also receive customer support forms submitted through text messaging.
+                          </p>
+                          <FieldArray name={`locationDetails.${index}.additionalEmails`}>
+                            {({ push, remove }) => (
+                              <div className="space-y-2 mt-2">
+                                {values.locationDetails[index].additionalEmails && values.locationDetails[index].additionalEmails.map((email: string, emailIndex: number) => (
+                                  <div key={emailIndex} className="flex gap-2">
+                                    <Field
+                                      type="email"
+                                      name={`locationDetails.${index}.additionalEmails.${emailIndex}`}
+                                      placeholder="additional@restaurant.com"
+                                      className="mt-0 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFieldChange(
+                                        setFieldValue, 
+                                        `locationDetails.${index}.additionalEmails.${emailIndex}`, 
+                                        e.target.value
+                                      )}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        remove(emailIndex);
+                                        handleFieldChange(
+                                          setFieldValue,
+                                          `locationDetails.${index}.additionalEmails`,
+                                          values.locationDetails[index].additionalEmails.filter((_: any, i: number) => i !== emailIndex)
+                                        );
+                                      }}
+                                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    push('');
+                                    const updatedEmails = [...(values.locationDetails[index].additionalEmails || []), ''];
+                                    handleFieldChange(
+                                      setFieldValue, 
+                                      `locationDetails.${index}.additionalEmails`, 
+                                      updatedEmails
+                                    );
+                                  }}
+                                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
+                                >
+                                  Add Additional Email
+                                </button>
+                              </div>
+                            )}
+                          </FieldArray>
+                        </div>
                       </div>
                     </div>
 
