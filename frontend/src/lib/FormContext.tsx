@@ -12,8 +12,6 @@ interface FormContextType {
   updateFormData: (newData: Partial<FormData>) => void;
   saveFormData: () => Promise<boolean>;
   switchForm: (formId: string) => Promise<void>;
-  shareForm: (recipientEmail: string) => Promise<void>;
-  removeSharing: (recipientEmail: string) => Promise<void>;
   uploadFile: (file: File, path: string) => Promise<string>;
   saveField: (fieldName: keyof FormData, value: any) => Promise<void>;
 }
