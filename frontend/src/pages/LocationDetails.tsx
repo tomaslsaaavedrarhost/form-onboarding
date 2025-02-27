@@ -2389,7 +2389,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.accessibility.hasHighChairs`}
                             checked={values.locationDetails[index].accessibility.hasHighChairs === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasHighChairs`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasHighChairs`, !values.locationDetails[index].accessibility.hasHighChairs)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">High chairs available</span>
@@ -2399,7 +2399,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.accessibility.hasWheelchairRamps`}
                             checked={values.locationDetails[index].accessibility.hasWheelchairRamps === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasWheelchairRamps`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasWheelchairRamps`, !values.locationDetails[index].accessibility.hasWheelchairRamps)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Wheelchair ramps available</span>
@@ -2409,7 +2409,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.accessibility.hasAccessibleRestrooms`}
                             checked={values.locationDetails[index].accessibility.hasAccessibleRestrooms === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleRestrooms`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleRestrooms`, !values.locationDetails[index].accessibility.hasAccessibleRestrooms)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Accessible restrooms available</span>
@@ -2419,7 +2419,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.accessibility.hasAccessibleParking`}
                             checked={values.locationDetails[index].accessibility.hasAccessibleParking === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleParking`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleParking`, !values.locationDetails[index].accessibility.hasAccessibleParking)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Accessible parking available</span>
@@ -2429,7 +2429,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.accessibility.hasAccessibleEntrance`}
                             checked={values.locationDetails[index].accessibility.hasAccessibleEntrance === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleEntrance`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.accessibility.hasAccessibleEntrance`, !values.locationDetails[index].accessibility.hasAccessibleEntrance)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Accessible entrance available</span>
@@ -2463,7 +2463,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.petPolicy.isPetFriendly`}
                             checked={values.locationDetails[index].petPolicy.isPetFriendly === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.petPolicy.isPetFriendly`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.petPolicy.isPetFriendly`, !values.locationDetails[index].petPolicy.isPetFriendly)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Pet-friendly</span>
@@ -2473,7 +2473,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.petPolicy.serviceAnimalsOnly`}
                             checked={values.locationDetails[index].petPolicy.serviceAnimalsOnly === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.petPolicy.serviceAnimalsOnly`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.petPolicy.serviceAnimalsOnly`, !values.locationDetails[index].petPolicy.serviceAnimalsOnly)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Service animals only</span>
@@ -2507,7 +2507,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.privateEvents.allowsPrivateEvents`}
                             checked={values.locationDetails[index].privateEvents.allowsPrivateEvents === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.privateEvents.allowsPrivateEvents`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.privateEvents.allowsPrivateEvents`, !values.locationDetails[index].privateEvents.allowsPrivateEvents)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Private events allowed</span>
@@ -2562,7 +2562,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.giftCards.offersGiftCards`}
                             checked={values.locationDetails[index].giftCards.offersGiftCards === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.offersGiftCards`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.offersGiftCards`, !values.locationDetails[index].giftCards.offersGiftCards)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Gift cards available</span>
@@ -2572,7 +2572,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.giftCards.digitalGiftCards`}
                             checked={values.locationDetails[index].giftCards.digitalGiftCards === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.digitalGiftCards`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.digitalGiftCards`, !values.locationDetails[index].giftCards.digitalGiftCards)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Digital gift cards available</span>
@@ -2582,7 +2582,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.giftCards.physicalGiftCards`}
                             checked={values.locationDetails[index].giftCards.physicalGiftCards === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.physicalGiftCards`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.giftCards.physicalGiftCards`, !values.locationDetails[index].giftCards.physicalGiftCards)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Physical gift cards available</span>
@@ -2637,7 +2637,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.loyaltyProgram.hasLoyaltyProgram`}
                             checked={values.locationDetails[index].loyaltyProgram.hasLoyaltyProgram === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.loyaltyProgram.hasLoyaltyProgram`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.loyaltyProgram.hasLoyaltyProgram`, !values.locationDetails[index].loyaltyProgram.hasLoyaltyProgram)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Loyalty program available</span>
@@ -2693,7 +2693,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.restaurantTechnology.hasOwnApp`}
                             checked={values.locationDetails[index].restaurantTechnology.hasOwnApp === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasOwnApp`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasOwnApp`, !values.locationDetails[index].restaurantTechnology.hasOwnApp)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Own app available</span>
@@ -2703,7 +2703,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.restaurantTechnology.hasTableSideOrdering`}
                             checked={values.locationDetails[index].restaurantTechnology.hasTableSideOrdering === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasTableSideOrdering`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasTableSideOrdering`, !values.locationDetails[index].restaurantTechnology.hasTableSideOrdering)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Table side ordering available</span>
@@ -2713,7 +2713,7 @@ const LocationDetails: React.FC = () => {
                             type="checkbox"
                             name={`locationDetails.${index}.restaurantTechnology.hasSelfCheckoutKiosks`}
                             checked={values.locationDetails[index].restaurantTechnology.hasSelfCheckoutKiosks === true}
-                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasSelfCheckoutKiosks`, true)}
+                            onChange={() => handleFieldChange(setFieldValue, `locationDetails.${index}.restaurantTechnology.hasSelfCheckoutKiosks`, !values.locationDetails[index].restaurantTechnology.hasSelfCheckoutKiosks)}
                             className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                           />
                           <span className="ml-2 text-sm text-gray-700">Self-checkout kiosks available</span>
