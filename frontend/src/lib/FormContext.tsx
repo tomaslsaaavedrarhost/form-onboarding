@@ -3,7 +3,6 @@ import { useFormProgress, FormData } from '../hooks/useFormProgress';
 
 interface FormContextType {
   formData: FormData;
-  sharedForms: FormData[];
   loading: boolean;
   error: string | null;
   unsavedChanges: boolean;

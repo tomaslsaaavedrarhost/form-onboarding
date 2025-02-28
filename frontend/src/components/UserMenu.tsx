@@ -9,7 +9,7 @@ function classNames(...classes: string[]) {
 
 export default function UserMenu() {
   const { user, logout } = useAuth();
-  const { sharedForms, selectedFormId, switchForm, unsavedChanges } = useFormProgress();
+  const { unsavedChanges } = useFormProgress();
 
   if (!user) return null;
 
@@ -45,56 +45,6 @@ export default function UserMenu() {
             <p className="text-sm text-gray-700">{user.email}</p>
           </div>
 
-          {/* Mi formulario */}
-          <Menu.Item>
-            {({ active }) => (
-              <button
-                onClick={() => switchForm(user.uid)}
-                className={classNames(
-                  active ? 'bg-gray-100' : '',
-                  selectedFormId === user.uid ? 'bg-indigo-50' : '',
-                  'flex items-center w-full px-4 py-2 text-sm text-gray-700'
-                )}
-              >
-                <div className="flex-1 text-left">Mi formulario</div>
-                {selectedFormId === user.uid && (
-                  <span className="ml-2 text-indigo-600">•</span>
-                )}
-              </button>
-            )}
-          </Menu.Item>
-
-          {/* Formularios compartidos */}
-          {sharedForms.length > 0 && (
-            <div className="py-1 border-t border-gray-200">
-              <div className="px-4 py-2 text-xs font-semibold text-gray-500">
-                FORMULARIOS COMPARTIDOS
-              </div>
-              {sharedForms.map((form) => (
-                <Menu.Item key={form.formId}>
-                  {({ active }) => (
-                    <button
-                      onClick={() => switchForm(form.formId!)}
-                      className={classNames(
-                        active ? 'bg-gray-100' : '',
-                        selectedFormId === form.formId ? 'bg-indigo-50' : '',
-                        'flex items-center w-full px-4 py-2 text-sm text-gray-700'
-                      )}
-                    >
-                      <div className="flex-1 text-left">
-                        <div>{form.ownerEmail}</div>
-                        <div className="text-xs text-gray-500">Compartido contigo</div>
-                      </div>
-                      {selectedFormId === form.formId && (
-                        <span className="ml-2 text-indigo-600">•</span>
-                      )}
-                    </button>
-                  )}
-                </Menu.Item>
-              ))}
-            </div>
-          )}
-
           {/* Cerrar sesión */}
           <Menu.Item>
             {({ active }) => (
@@ -102,7 +52,7 @@ export default function UserMenu() {
                 onClick={logout}
                 className={classNames(
                   active ? 'bg-gray-100' : '',
-                  'block w-full px-4 py-2 text-sm text-gray-700 border-t border-gray-200'
+                  'block w-full px-4 py-2 text-sm text-gray-700'
                 )}
               >
                 Cerrar sesión

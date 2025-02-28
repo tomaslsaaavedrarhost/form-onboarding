@@ -200,7 +200,6 @@ export const useFormProgress = () => {
   const [error, setError] = useState<string | null>(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
-  const [sharedForms, setSharedForms] = useState<FormData[]>([]);
 
   // Load user's form
   useEffect(() => {
@@ -418,7 +417,6 @@ export const useFormProgress = () => {
     error,
     unsavedChanges,
     selectedFormId,
-    sharedForms,
     updateField,
     updateFormData,
     saveFormData,

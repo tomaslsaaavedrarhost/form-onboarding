@@ -15,6 +15,10 @@ interface DemoUser {
   isDemoUser: true;
   email: string;
   displayName: string;
+  uid: string;
+  emailVerified: boolean;
+  photoURL: string | null;
+  getIdToken: () => Promise<string>;
 }
 
 interface AuthContextType {
@@ -52,7 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {
         isDemoUser: true as const,
         email: 'demo@example.com',
-        displayName: localStorage.getItem('demoUserName') || 'Usuario Demo'
+        displayName: localStorage.getItem('demoUserName') || 'Usuario Demo',
+        uid: 'demo-uid',
+        emailVerified: true,
+        photoURL: null,
+        getIdToken: async () => 'demo-token'
       };
     }
     return null;

@@ -8,6 +8,13 @@ interface Location {
   nameConfirmed: boolean
 }
 
+export interface Group {
+  id: string
+  name: string
+  locations: string[]
+  nameConfirmed: boolean
+}
+
 export interface MenuGroup {
   name: string
   locations: string[]
@@ -132,6 +139,21 @@ interface ReservationSettings {
   gracePeriod: number
   parking: ParkingDetails
   schedule: WeeklySchedule
+}
+
+// Nueva interfaz para eventos en vivo
+interface LiveEventSettings {
+  hasLiveEvents: boolean
+  eventFrequency: string // 'daily' | 'weekly' | 'monthly' | 'occasional'
+  eventDescription: string
+  promotedOnSocialMedia: boolean
+  socialMediaLinks: {
+    instagram?: string
+    facebook?: string
+    twitter?: string
+    tiktok?: string
+    other?: string
+  }
 }
 
 export interface LocationDetail {
@@ -314,9 +336,11 @@ export interface LocationDetail {
   }
   brunchMenu: {
     hasBrunchMenu: boolean
-    schedule: string
-    menuFile: File | null
+    schedule?: string
+    menuFile?: File | null
   }
+  // Nueva propiedad para eventos en vivo
+  liveEvents: LiveEventSettings
 }
 
 interface FormState {
@@ -325,6 +349,7 @@ interface FormState {
   locationDetails: LocationDetail[]
   menuGroups: MenuGroup[]
   menuFiles: { [groupId: string]: MenuConfig }
+  groups: Group[]
   legalData: {
     legalBusinessName: string
     restaurantType: string
@@ -381,6 +406,7 @@ const initialState: FormState = {
   locationDetails: [],
   menuGroups: [],
   menuFiles: {},
+  groups: [],
   legalData: {
     legalBusinessName: '',
     restaurantType: '',

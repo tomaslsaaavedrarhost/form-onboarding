@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from '../hooks/useTranslation'
 import { useFormProgress } from '../hooks/useFormProgress'
-import { Formik, Form, Field } from 'formik'
+import { Formik, Form, Field, ErrorMessage } from 'formik'
 import * as Yup from 'yup'
 import { FormData } from '../hooks/useFormProgress'
 
@@ -218,7 +218,7 @@ export default function ContactInfo() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-5xl mx-auto p-6">
       {showNotification && (
         <Notification
           message="Los cambios han sido guardados correctamente"
@@ -226,229 +226,244 @@ export default function ContactInfo() {
         />
       )}
       <SavePrompt />
-      <h2 className="text-2xl font-bold text-gray-900 mb-8">Información de Contacto</h2>
-      <Formik
-        initialValues={localData}
-        validationSchema={validationSchema}
-        onSubmit={handleNext}
-        enableReinitialize
-      >
-        {({ errors, touched, setFieldValue, values }) => (
-          <Form className="space-y-8">
-            {/* Contact Information Section */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-              <h3 className="text-lg font-medium text-gray-900">Responsable de Comunicación</h3>
-              <div className="space-y-6">
-                <div>
-                  <div className="flex items-center">
-                    <label htmlFor="contactName" className="form-label mb-0">
-                      Nombre Completo
-                    </label>
-                    <InfoTooltip 
-                      text={`Por favor, ingresa los datos de la persona responsable de la comunicación con RestoHost para ${getBusinessName()}. Esta persona será el punto de contacto principal para todas las comunicaciones importantes.`}
-                    />
-                  </div>
-                  <Field
-                    type="text"
-                    name="contactName"
-                    id="contactName"
-                    className="input-field mt-2"
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      const value = e.target.value;
-                      setFieldValue('contactName', value);
-                      handleFieldChange('contactName', value);
-                    }}
-                  />
-                  {errors.contactName && touched.contactName && (
-                    <div className="error-message">{errors.contactName}</div>
-                  )}
-                </div>
+      
+      <div className="space-y-8">
+        <div>
+          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-brand-orange to-brand-purple mb-2">
+            Información de Contacto
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Por favor, ingresa los datos de contacto para {getBusinessName()}.
+          </p>
+        </div>
 
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  <div>
-                    <div className="flex items-center">
-                      <label htmlFor="phone" className="form-label mb-0">
+        <Formik
+          initialValues={localData}
+          validationSchema={validationSchema}
+          onSubmit={handleNext}
+          enableReinitialize
+          validateOnMount
+        >
+          {({ isValid, values, setFieldValue, errors, touched }) => (
+            <Form className="space-y-8">
+              {/* Sección de Responsable de Comunicaciones */}
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h3 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-brand-orange to-brand-purple mb-4">
+                  Responsable de Comunicación
+                </h3>
+                
+                <div className="space-y-4">
+                  <div className="group">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="contactName" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
+                        Nombre del Contacto
+                      </label>
+                      <InfoTooltip text="Persona responsable de recibir comunicaciones importantes sobre la cuenta" />
+                    </div>
+                    <Field
+                      type="text"
+                      id="contactName"
+                      name="contactName"
+                      className="input-field"
+                      placeholder="Nombre completo"
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        handleFieldChange('contactName', e.target.value);
+                        setFieldValue('contactName', e.target.value);
+                      }}
+                    />
+                    <ErrorMessage name="contactName" component="div" className="text-red-500 text-sm mt-1" />
+                  </div>
+
+                  <div className="group">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
                         Teléfono de Contacto
                       </label>
-                      <InfoTooltip 
-                        text={`Número de teléfono donde podamos contactar al responsable de ${getBusinessName()} para temas importantes relacionados con la plataforma.`}
-                      />
+                      <InfoTooltip text="Número donde podemos contactarte para temas importantes" />
                     </div>
                     <Field
                       type="tel"
-                      name="phone"
                       id="phone"
-                      className="input-field mt-2"
+                      name="phone"
+                      className="input-field"
+                      placeholder="+1 (234) 567-8901"
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const value = e.target.value;
-                        setFieldValue('phone', value);
-                        handleFieldChange('phone', value);
+                        handleFieldChange('phone', e.target.value);
+                        setFieldValue('phone', e.target.value);
                       }}
                     />
-                    {errors.phone && touched.phone && (
-                      <div className="error-message">{errors.phone}</div>
-                    )}
+                    <ErrorMessage name="phone" component="div" className="text-red-500 text-sm mt-1" />
                   </div>
 
-                  <div>
-                    <div className="flex items-center">
-                      <label htmlFor="email" className="form-label mb-0">
-                        Correo Electrónico
+                  <div className="group">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
+                        Email de Contacto
                       </label>
-                      <InfoTooltip 
-                        text={`Este correo se utilizará para todas las comunicaciones importantes relacionadas con ${getBusinessName()} y también recibirá los reportes mensuales de todas las ubicaciones.`}
-                      />
+                      <InfoTooltip text="Email donde recibirás comunicaciones importantes" />
                     </div>
                     <Field
                       type="email"
-                      name="email"
                       id="email"
-                      className="input-field mt-2"
+                      name="email"
+                      className="input-field"
+                      placeholder="ejemplo@dominio.com"
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const value = e.target.value;
-                        setFieldValue('email', value);
-                        handleFieldChange('email', value);
+                        handleFieldChange('email', e.target.value);
+                        setFieldValue('email', e.target.value);
                       }}
                     />
-                    {errors.email && touched.email && (
-                      <div className="error-message">{errors.email}</div>
-                    )}
+                    <ErrorMessage name="email" component="div" className="text-red-500 text-sm mt-1" />
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Office Information Section */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-              <h3 className="text-lg font-medium text-gray-900">Dirección Legal de la LLC</h3>
-              <div className="space-y-6">
-                <div>
-                  <div className="flex items-center">
-                    <label htmlFor="address" className="form-label mb-0">
-                      Dirección
-                    </label>
-                    <InfoTooltip 
-                      text={`Ingresa la dirección legal donde está registrada la LLC de ${getBusinessName()}. Esta debe ser la dirección oficial que aparece en los documentos de registro de la compañía.`}
-                    />
-                  </div>
-                  <Field
-                    type="text"
-                    name="address"
-                    id="address"
-                    className="input-field mt-2"
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                      const value = e.target.value;
-                      setFieldValue('address', value);
-                      handleFieldChange('address', value);
-                    }}
-                  />
-                  {errors.address && touched.address && (
-                    <div className="error-message">{errors.address}</div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                  <div>
-                    <div className="flex items-center">
-                      <label htmlFor="city" className="form-label mb-0">
-                        Ciudad
+              {/* Sección de Información de Oficina */}
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <h3 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-brand-orange to-brand-purple mb-4">
+                  Dirección Legal de la LLC
+                </h3>
+                
+                <div className="space-y-4">
+                  <div className="group">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
+                        Dirección
                       </label>
-                      <InfoTooltip text={`Ciudad donde está registrada legalmente la LLC de ${getBusinessName()}.`} />
+                      <InfoTooltip text="Dirección legal registrada del negocio" />
                     </div>
                     <Field
                       type="text"
-                      name="city"
-                      id="city"
-                      className="input-field mt-2"
+                      id="address"
+                      name="address"
+                      className="input-field"
+                      placeholder="Calle y número"
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const value = e.target.value;
-                        setFieldValue('city', value);
-                        handleFieldChange('city', value);
+                        handleFieldChange('address', e.target.value);
+                        setFieldValue('address', e.target.value);
                       }}
                     />
-                    {errors.city && touched.city && (
-                      <div className="error-message">{errors.city}</div>
-                    )}
+                    <ErrorMessage name="address" component="div" className="text-red-500 text-sm mt-1" />
                   </div>
 
-                  <div>
-                    <div className="flex items-center">
-                      <label htmlFor="state" className="form-label mb-0">
-                        Estado
-                      </label>
-                      <InfoTooltip text={`Estado donde está registrada legalmente la LLC de ${getBusinessName()}.`} />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="group">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
+                          Ciudad
+                        </label>
+                      </div>
+                      <Field
+                        type="text"
+                        id="city"
+                        name="city"
+                        className="input-field"
+                        placeholder="Ciudad"
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          handleFieldChange('city', e.target.value);
+                          setFieldValue('city', e.target.value);
+                        }}
+                      />
+                      <ErrorMessage name="city" component="div" className="text-red-500 text-sm mt-1" />
                     </div>
-                    <Field
-                      type="text"
-                      name="state"
-                      id="state"
-                      className="input-field mt-2"
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const value = e.target.value;
-                        setFieldValue('state', value);
-                        handleFieldChange('state', value);
-                      }}
-                    />
-                    {errors.state && touched.state && (
-                      <div className="error-message">{errors.state}</div>
-                    )}
-                  </div>
 
-                  <div>
-                    <div className="flex items-center">
-                      <label htmlFor="zipCode" className="form-label mb-0">
-                        Código Postal
-                      </label>
-                      <InfoTooltip text={`Código postal de la dirección legal donde está registrada la LLC de ${getBusinessName()}.`} />
+                    <div className="group">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
+                          Estado
+                        </label>
+                      </div>
+                      <Field
+                        type="text"
+                        id="state"
+                        name="state"
+                        className="input-field"
+                        placeholder="Estado"
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          handleFieldChange('state', e.target.value);
+                          setFieldValue('state', e.target.value);
+                        }}
+                      />
+                      <ErrorMessage name="state" component="div" className="text-red-500 text-sm mt-1" />
                     </div>
-                    <Field
-                      type="text"
-                      name="zipCode"
-                      id="zipCode"
-                      className="input-field mt-2"
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const value = e.target.value;
-                        setFieldValue('zipCode', value);
-                        handleFieldChange('zipCode', value);
-                      }}
-                    />
-                    {errors.zipCode && touched.zipCode && (
-                      <div className="error-message">{errors.zipCode}</div>
-                    )}
+
+                    <div className="group">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="zipCode" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
+                          Código Postal
+                        </label>
+                      </div>
+                      <Field
+                        type="text"
+                        id="zipCode"
+                        name="zipCode"
+                        className="input-field"
+                        placeholder="Código postal"
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          handleFieldChange('zipCode', e.target.value);
+                          setFieldValue('zipCode', e.target.value);
+                        }}
+                      />
+                      <ErrorMessage name="zipCode" component="div" className="text-red-500 text-sm mt-1" />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex justify-between space-x-4">
-              <button
-                type="button"
-                onClick={handleSave}
-                className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
-                disabled={!hasUnsavedChanges}
-              >
-                {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
-              </button>
-              <div className="flex space-x-4">
-                <button
-                  type="button"
-                  onClick={() => navigate('/onboarding/legal-data')}
-                  className="btn-secondary"
-                >
-                  {t('back')}
-                </button>
-                <button 
-                  type="submit"
-                  onClick={() => handleNext(values)}
-                  className="btn-primary"
-                >
-                  {t('continue')}
-                </button>
+              <div className="fixed bottom-0 left-0 right-0 bg-white py-3 px-6 z-10 shadow-lg">
+                <div className="flex justify-between max-w-5xl mx-auto">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/onboarding/legal-data')}
+                    className="btn-secondary inline-flex items-center"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Atrás
+                  </button>
+                  
+                  <div className="flex space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => saveFormData()}
+                      className={hasUnsavedChanges ? "btn-unsaved inline-flex items-center" : "btn-saved inline-flex items-center"}
+                      disabled={!hasUnsavedChanges}
+                    >
+                      {hasUnsavedChanges ? (
+                        <>
+                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          Guardar cambios
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Cambios guardados
+                        </>
+                      )}
+                    </button>
+                    
+                    <button
+                      type="submit"
+                      className="btn-primary inline-flex items-center"
+                      disabled={!isValid}
+                    >
+                      Continuar
+                      <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </Form>
-        )}
-      </Formik>
+            </Form>
+          )}
+        </Formik>
+      </div>
     </div>
   )
 } 

@@ -172,8 +172,8 @@ export default function OnboardingLayout() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex min-h-screen flex-col">
           {/* Header */}
-          <header className="py-10">
-            <div className="mx-auto max-w-7xl flex justify-between items-center">
+          <header className="py-8">
+            <div className="flex justify-between items-center">
               <div className="flex items-center">
                 <img 
                   src="/logo.png"
@@ -188,58 +188,176 @@ export default function OnboardingLayout() {
           {/* Modal de confirmación */}
           <SavePrompt />
 
-          {/* Steps */}
-          <nav aria-label="Progress" className="mb-8">
-            <ol role="list" className="space-y-4 md:flex md:space-x-8 md:space-y-0">
-              {steps.map((step, index) => {
-                const isCurrent = location.pathname === step.href
-                const isCompleted = steps.findIndex(s => s.href === location.pathname) > index
+          <div className="flex flex-1 mt-4">
+            {/* Steps - Vertical Timeline */}
+            <nav aria-label="Progress" className="w-64 pr-4 pt-4 hidden md:block sticky top-8 self-start h-full">
+              {/* Línea de fondo continua */}
+              <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200 h-full"></div>
+              
+              <ol role="list" className="relative ml-3 space-y-5">
+                {steps.map((step, index) => {
+                  const isCurrent = location.pathname === step.href
+                  const isCompleted = steps.findIndex(s => s.href === location.pathname) > index
+                  
+                  // Determinar el inicio y final de cada segmento de la línea
+                  // El primer segmento empieza en 0, los siguientes empiezan donde termina el anterior
+                  const prevStepCompleted = index > 0 && steps.findIndex(s => s.href === location.pathname) > index-1;
+                  
+                  return (
+                    <li key={step.name} className="relative">
+                      {/* Segmento de línea con color según estado */}
+                      {index > 0 && (
+                        <div 
+                          className={`absolute left-0 top-0 h-full w-0.5 -mt-5 ${
+                            isCompleted 
+                              ? 'bg-gradient-to-b from-green-500 to-green-500' 
+                              : isCurrent
+                                ? 'bg-gradient-to-b from-green-500 to-orange-400'
+                                : prevStepCompleted
+                                  ? 'bg-gradient-to-b from-green-500 to-violet-500'
+                                  : 'bg-gradient-to-b from-violet-500 to-violet-500'
+                          }`}
+                          aria-hidden="true" 
+                        />
+                      )}
+                      
+                      {/* Circle indicator with gradient and shadow */}
+                      <div 
+                        className={`absolute -left-2 flex h-5 w-5 items-center justify-center rounded-full shadow-md z-10 ${
+                          isCurrent 
+                            ? 'bg-gradient-to-r from-orange-400 to-pink-500 shadow-orange-200' 
+                            : isCompleted 
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-600 shadow-green-200'
+                              : 'bg-gradient-to-r from-violet-500 to-indigo-500 shadow-indigo-200'
+                        }`}
+                        aria-hidden="true"
+                      />
 
-                return (
-                  <li key={step.name} className="md:flex-1">
-                    <div
-                      className={`group flex flex-col border-l-4 py-2 pl-4 ${
-                        isCurrent ? 'border-brand-purple' : 
-                        isCompleted ? 'border-green-500' : 
-                        'border-gray-200'
-                      } md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4 cursor-pointer hover:bg-gray-50`}
+                      {/* Step content */}
+                      <div 
+                        className={`group ml-6 flex cursor-pointer flex-col py-3 pl-4 ${
+                          isCurrent ? 'bg-orange-50/30' : ''
+                        } rounded-lg hover:bg-gray-50/80 transition-colors duration-200`}
+                        onClick={() => handleStepClick(step.href)}
+                      >
+                        <span className="text-sm font-medium flex items-center">
+                          {isCompleted && (
+                            <CheckCircleIcon 
+                              className="mr-1.5 h-5 w-5 text-green-500" 
+                              aria-hidden="true" 
+                            />
+                          )}
+                          <span 
+                            className={
+                              isCurrent 
+                                ? 'text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500 font-semibold' 
+                                : isCompleted 
+                                  ? 'text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-600 font-semibold'
+                                  : 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 to-indigo-500 font-semibold'
+                            }
+                          >
+                            {t('step')} {index + 1}
+                          </span>
+                        </span>
+                        <span 
+                          className={`text-sm font-medium mt-1 ${
+                            isCurrent 
+                              ? 'text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500 font-semibold' 
+                              : isCompleted 
+                                ? 'text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-600 font-semibold'
+                                : 'text-transparent bg-clip-text bg-gradient-to-r from-violet-500 to-indigo-500 font-semibold'
+                          }`}
+                        >
+                          {step.name}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ol>
+            </nav>
+
+            {/* Responsive Horizontal Steps for Mobile */}
+            <nav aria-label="Progress" className="mb-6 md:hidden relative py-4">
+              {/* Línea de fondo continua */}
+              <div className="absolute left-0 right-0 h-0.5 bg-gray-200 w-full top-8 -z-10"></div>
+              
+              <ol role="list" className="flex overflow-x-auto py-2 px-4 hide-scrollbar relative mx-auto">
+                {steps.map((step, index) => {
+                  const isCurrent = location.pathname === step.href
+                  const isCompleted = steps.findIndex(s => s.href === location.pathname) > index
+                  
+                  // Determinar si el paso anterior está completado
+                  const prevCompleted = index > 0 && steps.findIndex(s => s.href === location.pathname) > index-1;
+                  
+                  return (
+                    <li 
+                      key={step.name} 
+                      className="flex-shrink-0 flex flex-col items-center mx-4 relative z-10"
                       onClick={() => handleStepClick(step.href)}
                     >
-                      <span className="text-sm font-medium flex items-center">
-                        {isCompleted && (
-                          <CheckCircleIcon 
-                            className="mr-1.5 h-5 w-5 text-green-500" 
-                            aria-hidden="true" 
-                          />
+                      {/* Connecting line with gradient - visible above the background line */}
+                      {index < steps.length - 1 && (
+                        <div 
+                          className={`h-0.5 absolute left-1/2 right-0 top-4 -mr-4 ${
+                            isCompleted 
+                              ? 'bg-gradient-to-r from-green-500 to-green-500' 
+                              : isCurrent 
+                                ? 'bg-gradient-to-r from-orange-400 to-violet-500'
+                                : prevCompleted
+                                  ? 'bg-gradient-to-r from-green-500 to-violet-500' 
+                                  : 'bg-gradient-to-r from-violet-500 to-violet-500'
+                          }`}
+                          style={{ width: '100%', transform: 'translateX(50%)' }}
+                          aria-hidden="true"
+                        />
+                      )}
+                      
+                      {/* Step number with gradient background and shadow */}
+                      <div 
+                        className={`h-8 w-8 rounded-full flex items-center justify-center shadow-md ${
+                          isCurrent 
+                            ? 'bg-gradient-to-r from-orange-400 to-pink-500 shadow-orange-200' 
+                            : isCompleted 
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-600 shadow-green-200'
+                              : 'bg-gradient-to-r from-violet-500 to-indigo-500 shadow-indigo-200'
+                        }`}
+                        style={{ zIndex: 20 }}
+                      >
+                        {isCompleted ? (
+                          <CheckCircleIcon className="h-5 w-5 text-white" aria-hidden="true" />
+                        ) : (
+                          <span className="text-white font-medium">{index + 1}</span>
                         )}
-                        <span className={
-                          isCurrent ? 'text-brand-purple' :
-                          isCompleted ? 'text-green-600' :
-                          'text-gray-500'
-                        }>
-                          {t('step')} {index + 1}
+                      </div>
+                      
+                      {/* Step name (only for current and completed) */}
+                      {(isCurrent || isCompleted) && (
+                        <span 
+                          className={`text-xs font-medium mt-2 max-w-20 text-center ${
+                            isCurrent 
+                              ? 'text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500 font-semibold' 
+                              : isCompleted 
+                                ? 'text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-600 font-semibold'
+                                : 'text-gray-500'
+                          }`}
+                        >
+                          {step.name}
                         </span>
-                      </span>
-                      <span className={`text-sm font-medium ${
-                        isCurrent ? 'text-brand-purple' :
-                        isCompleted ? 'text-green-600' :
-                        'text-gray-500'
-                      }`}>
-                        {step.name}
-                      </span>
-                    </div>
-                  </li>
-                )
-              })}
-            </ol>
-          </nav>
+                      )}
+                    </li>
+                  )
+                })}
+              </ol>
+            </nav>
 
-          {/* Main content */}
-          <main className="flex-1">
-            <div className="mx-auto max-w-3xl">
-              <Outlet />
-            </div>
-          </main>
+            {/* Main content with proper spacing */}
+            <main className="flex-1 pb-16">
+              <div className="max-w-3xl mx-auto px-1 md:px-4">
+                <Outlet />
+              </div>
+            </main>
+          </div>
         </div>
       </div>
     </div>
