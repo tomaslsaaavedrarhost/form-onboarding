@@ -61,7 +61,7 @@ interface MenuConfig {
 }
 
 interface TipsPolicy {
-  useGroups: boolean
+  policyMode: 'individual' | 'single' | 'grouped' // individual: por ubicación, single: una para todas, grouped: por grupos
   locationPolicies: {
     [locationId: string]: {
       hasTips: 'yes' | 'no' | 'depends'
@@ -78,6 +78,7 @@ interface TipsPolicy {
       serviceChargeDetails: string
     }
   }
+  locationGroups: { [key: string]: string[] } // Mapa de groupId -> array de locationIds
 }
 
 interface TimeSlot {
@@ -435,9 +436,10 @@ const initialState: FormState = {
     additionalInfo: '',
   },
   tipsPolicy: {
-    useGroups: false,
+    policyMode: 'individual',
     locationPolicies: {},
     groupPolicies: {},
+    locationGroups: {},
   },
   additionalNotes: '',
   termsAccepted: false,

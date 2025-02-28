@@ -174,98 +174,104 @@ export default function AIConfig() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Configuración del Asistente Virtual</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          Personaliza la experiencia de tu asistente virtual para que se alinee con la identidad de tu restaurante
-        </p>
-      </div>
+    <div className="min-h-screen bg-white px-4 py-8 pb-24">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-800 bg-gradient-to-r from-brand-orange to-brand-purple bg-clip-text text-transparent">
+            Configuración del Asistente Virtual
+          </h2>
+          <p className="mt-3 text-gray-600">
+            Configure los diferentes aspectos de su asistente virtual para su restaurante.
+          </p>
+        </div>
 
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleNext}
-      >
-        {({ values, errors, touched, setFieldValue }) => (
-          <Form className="space-y-8" data-formik-values={JSON.stringify(values)}>
-            {showNotification && (
-              <Notification
-                message="Los cambios han sido guardados correctamente"
-                onClose={() => setShowNotification(false)}
-              />
-            )}
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleNext}
+        >
+          {({ values, errors, touched, setFieldValue }) => (
+            <Form className="space-y-6" data-formik-values={JSON.stringify(values)}>
+              {showNotification && (
+                <Notification
+                  message="Los cambios han sido guardados correctamente"
+                  onClose={() => setShowNotification(false)}
+                />
+              )}
 
-            {showSavePrompt && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4 shadow-xl">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    Cambios sin guardar
-                  </h3>
-                  <p className="text-gray-600 mb-6">
-                    Tienes cambios sin guardar. ¿Qué deseas hacer?
-                  </p>
-                  <div className="flex justify-end space-x-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowSavePrompt(false);
-                        handleNext(values);
-                      }}
-                      className="btn-secondary"
-                    >
-                      Continuar sin guardar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          // Asegurarse que personality es un array
-                          const personalityArray = Array.isArray(values.personality) ? values.personality : [values.personality];
-                          
-                          // Guardamos primero los valores actuales en el contexto
-                          dispatch({
-                            type: 'SET_AI_CONFIG',
-                            payload: {
-                              ...values,
-                              personality: personalityArray,
-                              avatar: null
+              {showSavePrompt && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4 shadow-xl">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                      Cambios sin guardar
+                    </h3>
+                    <p className="text-gray-600 mb-6">
+                      Tienes cambios sin guardar. ¿Qué deseas hacer?
+                    </p>
+                    <div className="flex justify-end space-x-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSavePrompt(false);
+                          handleNext(values);
+                        }}
+                        className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Continuar sin guardar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const personalityArray = Array.isArray(values.personality) ? values.personality : [values.personality];
+                            
+                            dispatch({
+                              type: 'SET_AI_CONFIG',
+                              payload: {
+                                ...values,
+                                personality: personalityArray,
+                                avatar: null
+                              }
+                            });
+                            const success = await saveFormData();
+                            if (success) {
+                              setShowSavePrompt(false);
+                              setHasUnsavedChanges(false);
+                              navigate('/onboarding/menu-config');
                             }
-                          });
-                          // Usamos directamente saveFormData
-                          const success = await saveFormData();
-                          if (success) {
-                            setShowSavePrompt(false);
-                            setHasUnsavedChanges(false);
-                            navigate('/onboarding/menu-config');
+                          } catch (e) {
+                            console.error('Error al guardar los datos:', e);
                           }
-                        } catch (e) {
-                          console.error('Error al guardar los datos:', e);
-                        }
-                      }}
-                      className="btn-primary"
-                    >
-                      Guardar y continuar
-                    </button>
+                        }}
+                        className="px-5 py-2.5 bg-gradient-to-r from-brand-orange to-brand-purple text-white rounded-lg hover:opacity-90 transition-colors"
+                      >
+                        Guardar y continuar
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="bg-white shadow rounded-lg overflow-hidden">
-              <div className="p-6 space-y-6">
-                <div>
-                  <label htmlFor="language" className="block text-sm font-medium text-gray-700">
-                    Idioma Principal<span className="text-red-500">*</span>
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
+              {/* Idioma Principal */}
+              <div className="bg-white shadow rounded-lg overflow-hidden relative p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple flex items-center justify-center mr-4">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-800">Idioma Principal</h3>
+                </div>
+                
+                <div className="pl-16">
+                  <p className="text-gray-600 mb-4">
                     Selecciona el idioma principal en el que el asistente se comunicará
                   </p>
                   <Field
                     as="select"
                     id="language"
                     name="language"
-                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange py-3 px-4"
                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                       const value = e.target.value;
                       setFieldValue('language', value);
@@ -283,19 +289,28 @@ export default function AIConfig() {
                     <p className="mt-2 text-sm text-red-600">{errors.language}</p>
                   )}
                 </div>
+              </div>
 
-                <div>
-                  <label htmlFor="assistantName" className="block text-sm font-medium text-gray-700">
-                    Nombre del Asistente
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
+              {/* Nombre del Asistente */}
+              <div className="bg-white shadow rounded-lg overflow-hidden relative p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple flex items-center justify-center mr-4">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-800">Nombre del Asistente</h3>
+                </div>
+                
+                <div className="pl-16">
+                  <p className="text-gray-600 mb-4">
                     Personaliza el nombre de tu asistente virtual o deja en blanco para usar el nombre por defecto
                   </p>
                   <Field
                     type="text"
                     id="assistantName"
                     name="assistantName"
-                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange py-3 px-4"
                     placeholder="Ej: María, Alex"
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const value = e.target.value;
@@ -304,58 +319,116 @@ export default function AIConfig() {
                     }}
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label htmlFor="assistantGender" className="block text-sm font-medium text-gray-700">
-                    Género del Asistente<span className="text-red-500">*</span>
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
+              {/* Género del Asistente */}
+              <div className="bg-white shadow rounded-lg overflow-hidden relative p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple flex items-center justify-center mr-4">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-800">Género del Asistente</h3>
+                </div>
+                
+                <div className="pl-16">
+                  <p className="text-gray-600 mb-4">
                     Selecciona el género que mejor represente a tu asistente virtual
                   </p>
-                  <Field
-                    as="select"
-                    id="assistantGender"
-                    name="assistantGender"
-                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                      const value = e.target.value;
-                      setFieldValue('assistantGender', value);
-                      handleFieldChange('assistantGender', value);
-                    }}
-                  >
-                    <option value="">Selecciona el género...</option>
+                  <div className="grid grid-cols-3 gap-4">
                     {genderOptions.map(gender => (
-                      <option key={gender.value} value={gender.value}>
-                        {gender.label}
-                      </option>
+                      <label
+                        key={gender.value}
+                        className={`
+                          flex flex-col items-center justify-center p-4 rounded-lg cursor-pointer
+                          ${values.assistantGender === gender.value 
+                            ? 'bg-gradient-to-br from-brand-orange/10 to-brand-purple/10 border-2 border-brand-purple' 
+                            : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                          }
+                          transition-all duration-200
+                        `}
+                      >
+                        <div className={`
+                          w-12 h-12 rounded-full flex items-center justify-center mb-2
+                          ${values.assistantGender === gender.value 
+                            ? 'bg-gradient-to-r from-brand-orange to-brand-purple' 
+                            : 'bg-gray-200'
+                          }
+                        `}>
+                          {gender.value === 'male' && (
+                            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                            </svg>
+                          )}
+                          {gender.value === 'female' && (
+                            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                            </svg>
+                          )}
+                          {gender.value === 'neutral' && (
+                            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                            </svg>
+                          )}
+                        </div>
+                        <span className={`text-sm font-medium ${values.assistantGender === gender.value ? 'text-brand-purple' : 'text-gray-700'}`}>
+                          {gender.label}
+                        </span>
+                        <input
+                          type="radio"
+                          name="assistantGender"
+                          value={gender.value}
+                          checked={values.assistantGender === gender.value}
+                          onChange={(e) => {
+                            setFieldValue('assistantGender', e.target.value);
+                            handleFieldChange('assistantGender', e.target.value);
+                          }}
+                          className="sr-only"
+                        />
+                      </label>
                     ))}
-                  </Field>
+                  </div>
                   {errors.assistantGender && touched.assistantGender && (
                     <p className="mt-2 text-sm text-red-600">{errors.assistantGender}</p>
                   )}
                 </div>
+              </div>
 
-                <div>
-                  <label htmlFor="personality" className="block text-sm font-medium text-gray-700">
-                    Personalidad<span className="text-red-500">*</span>
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
+              {/* Personalidad */}
+              <div className="bg-white shadow rounded-lg overflow-hidden relative p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple flex items-center justify-center mr-4">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-800">Personalidad</h3>
+                </div>
+                
+                <div className="pl-16">
+                  <p className="text-gray-600 mb-4">
                     Define el estilo de comunicación y la personalidad de tu asistente (selecciona hasta 3)
                   </p>
+                  
                   {maxPersonalitiesError && (
-                    <p className="mt-2 text-sm text-brand-orange font-medium">
+                    <p className="mb-4 text-sm font-medium text-brand-orange">
                       Solo puedes seleccionar hasta 3 personalidades
                     </p>
                   )}
-                  <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
                     {personalityTraits.map(trait => (
                       <label
                         key={trait.value}
-                        className={`relative flex cursor-pointer rounded-lg border p-4 shadow-sm focus:outline-none ${
-                          values.personality.includes(trait.value)
-                            ? 'border-brand-purple ring-2 ring-brand-purple bg-gradient-to-r from-brand-purple/5 to-brand-orange/5'
-                            : 'border-gray-300'
-                        }`}
+                        className={`
+                          relative flex items-center p-4 rounded-lg cursor-pointer
+                          ${values.personality.includes(trait.value) 
+                            ? 'bg-gradient-to-br from-brand-orange/10 to-brand-purple/10 border-2 border-brand-purple' 
+                            : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                          }
+                          transition-all duration-200
+                        `}
                       >
                         <input
                           type="checkbox"
@@ -368,15 +441,12 @@ export default function AIConfig() {
                             let newPersonality = [...values.personality];
                             
                             if (isChecked && newPersonality.length < 3) {
-                              // Agregar el valor si está marcado y hay menos de 3 seleccionados
                               newPersonality.push(value);
                               setMaxPersonalitiesError(false);
                             } else if (isChecked && newPersonality.length >= 3) {
-                              // Si ya hay 3 seleccionados, mostrar mensaje de error
                               setMaxPersonalitiesError(true);
                               return;
                             } else {
-                              // Eliminar el valor si está desmarcado
                               newPersonality = newPersonality.filter(p => p !== value);
                               setMaxPersonalitiesError(false);
                             }
@@ -384,51 +454,57 @@ export default function AIConfig() {
                             setFieldValue('personality', newPersonality);
                             handleFieldChange('personality', newPersonality);
                           }}
-                          className="h-4 w-4 mr-2 text-brand-purple border-gray-300 rounded focus:ring-brand-orange checked:bg-gradient-brand-reverse"
+                          className="h-5 w-5 text-brand-purple border-gray-300 rounded mr-3 focus:ring-brand-purple"
                         />
-                        <span className="flex flex-1">
-                          <span className="flex flex-col">
-                            <span className={`block text-sm font-medium ${values.personality.includes(trait.value) ? 'text-brand-purple' : 'text-gray-900'}`}>
-                              {trait.label}
-                            </span>
-                          </span>
+                        <span className={`text-base font-medium ${values.personality.includes(trait.value) ? 'text-brand-purple' : 'text-gray-700'}`}>
+                          {trait.label}
                         </span>
                       </label>
                     ))}
                   </div>
+                  
                   {errors.personality && touched.personality && (
                     <p className="mt-2 text-sm text-red-600">{errors.personality}</p>
                   )}
+                  
+                  {values.personality.includes('other') && (
+                    <div className="mt-4">
+                      <label htmlFor="otherPersonality" className="block text-sm font-medium text-gray-700">
+                        Describe la personalidad <span className="text-red-500">*</span>
+                      </label>
+                      <Field
+                        type="text"
+                        id="otherPersonality"
+                        name="otherPersonality"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange py-2 px-3"
+                        placeholder="Describe la personalidad deseada..."
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          const value = e.target.value;
+                          setFieldValue('otherPersonality', value);
+                          handleFieldChange('otherPersonality', value);
+                        }}
+                      />
+                      {errors.otherPersonality && touched.otherPersonality && (
+                        <p className="mt-2 text-sm text-red-600">{errors.otherPersonality}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
+              </div>
 
-                {values.personality.includes('other') && (
-                  <div>
-                    <label htmlFor="otherPersonality" className="block text-sm font-medium text-gray-700">
-                      Describe la personalidad<span className="text-red-500">*</span>
-                    </label>
-                    <Field
-                      type="text"
-                      id="otherPersonality"
-                      name="otherPersonality"
-                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
-                      placeholder="Describe la personalidad deseada..."
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const value = e.target.value;
-                        setFieldValue('otherPersonality', value);
-                        handleFieldChange('otherPersonality', value);
-                      }}
-                    />
-                    {errors.otherPersonality && touched.otherPersonality && (
-                      <p className="mt-2 text-sm text-red-600">{errors.otherPersonality}</p>
-                    )}
+              {/* Información Adicional */}
+              <div className="bg-white shadow rounded-lg overflow-hidden relative p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple flex items-center justify-center mr-4">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
                   </div>
-                )}
-
-                <div>
-                  <label htmlFor="additionalInfo" className="block text-sm font-medium text-gray-700">
-                    Información Adicional
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <h3 className="text-xl font-semibold text-gray-800">Información Adicional</h3>
+                </div>
+                
+                <div className="pl-16">
+                  <p className="text-gray-600 mb-4">
                     Agrega cualquier información adicional que ayude a personalizar mejor tu asistente virtual
                   </p>
                   <Field
@@ -436,7 +512,7 @@ export default function AIConfig() {
                     id="additionalInfo"
                     name="additionalInfo"
                     rows={4}
-                    className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange sm:text-sm"
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange py-3 px-4"
                     placeholder="Ej: Preferencias específicas de comunicación, temas a evitar, etc."
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                       const value = e.target.value;
@@ -446,36 +522,55 @@ export default function AIConfig() {
                   />
                 </div>
               </div>
-            </div>
 
-            <div className="flex justify-between pt-6">
-              <button
-                type="button"
-                onClick={() => navigate('/onboarding/location-details')}
-                className="btn-secondary"
-              >
-                Atrás
-              </button>
-              <div className="flex space-x-4">
-                <button
-                  type="button"
-                  onClick={() => handleSave(values)}
-                  className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
-                  disabled={!hasUnsavedChanges}
-                >
-                  {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
-                </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                >
-                  Continuar
-                </button>
+              {/* Barra fija de botones en la parte inferior */}
+              <div className="fixed bottom-0 left-0 right-0 py-4 px-6 bg-white border-t border-gray-200 flex justify-between items-center z-10">
+                {!hasUnsavedChanges ? (
+                  <div className="flex items-center bg-green-50 border border-green-200 text-green-700 px-4 py-2 rounded-lg">
+                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
+                    </svg>
+                    <div>
+                      <div className="font-medium">Cambios guardados</div>
+                      <div className="text-xs text-green-600">Todo está al día</div>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/onboarding/location-details')}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Atrás
+                  </button>
+                )}
+
+                <div className="flex space-x-4">
+                  {hasUnsavedChanges ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSave(values)}
+                      className="px-6 py-3 bg-white border border-brand-orange text-brand-orange font-medium rounded-lg hover:bg-orange-50 transition-colors"
+                    >
+                      Guardar cambios
+                    </button>
+                  ) : (
+                    <div className="px-6 py-3 bg-gray-100 text-gray-500 font-medium rounded-lg">
+                      Cambios guardados
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-gradient-to-r from-brand-orange to-brand-purple text-white font-medium rounded-lg hover:opacity-90 transition-colors"
+                  >
+                    Continuar
+                  </button>
+                </div>
               </div>
-            </div>
-          </Form>
-        )}
-      </Formik>
+            </Form>
+          )}
+        </Formik>
+      </div>
     </div>
   )
 } 

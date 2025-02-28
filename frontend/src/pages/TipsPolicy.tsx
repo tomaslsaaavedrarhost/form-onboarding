@@ -62,21 +62,23 @@ interface PolicyObject {
 }
 
 interface TipsPolicyState {
-  useGroups: boolean
+  policyMode: 'individual' | 'single' | 'grouped' // individual: por ubicación, single: una para todas, grouped: por grupos
   locationPolicies: { [key: string]: PolicyObject }
   groupPolicies: { [key: string]: PolicyObject }
+  locationGroups: { [key: string]: string[] } // Mapa de groupId -> array de locationIds
 }
 
 interface FormValues {
-  useGroups: boolean
+  policyMode: 'individual' | 'single' | 'grouped'
   locationPolicies: LocationPolicy[]
   groupPolicies: GroupPolicy[]
+  locationGroups: { [key: string]: string[] } // Cambiado para coincidir con TipsPolicyState
 }
 
 const validationSchema = Yup.object().shape({
-  useGroups: Yup.boolean().required(),
-  locationPolicies: Yup.array().when('useGroups', {
-    is: false,
+  policyMode: Yup.string().oneOf(['individual', 'single', 'grouped']).required(),
+  locationPolicies: Yup.array().when('policyMode', {
+    is: 'individual',
     then: () => Yup.array().of(
       Yup.object().shape({
         locationId: Yup.string().required(),
@@ -108,8 +110,8 @@ const validationSchema = Yup.object().shape({
       })
     ),
   }),
-  groupPolicies: Yup.array().when('useGroups', {
-    is: true,
+  groupPolicies: Yup.array().when('policyMode', {
+    is: 'grouped',
     then: () => Yup.array().of(
       Yup.object().shape({
         groupId: Yup.string().required(),
@@ -146,11 +148,11 @@ const validationSchema = Yup.object().shape({
 
 // Componente para secciones con el formato consistente
 const SectionCard = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
-    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-      <h2 className="text-lg font-medium text-gray-900">{title}</h2>
+  <div className="bg-white shadow-lg rounded-2xl overflow-hidden mb-6 transition-all duration-300 hover:shadow-xl">
+    <div className="px-6 py-5 border-b border-gray-100">
+      <h2 className="text-xl font-bold bg-gradient-to-r from-brand-orange to-brand-purple bg-clip-text text-transparent">{title}</h2>
     </div>
-    <div className="px-6 py-5">{children}</div>
+    <div className="px-6 py-6">{children}</div>
   </div>
 );
 
@@ -164,25 +166,30 @@ interface AccordionProps {
 
 const Accordion = ({ title, isOpen, onToggle, children }: AccordionProps) => {
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden mb-4">
+    <div className="bg-white shadow-lg rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-xl">
       <div 
-        className="flex justify-between items-center p-4 bg-gray-50 cursor-pointer" 
+        className="p-5 cursor-pointer flex justify-between items-center border-b border-gray-100"
         onClick={onToggle}
       >
-        <h3 className="text-lg font-medium text-gray-900">{title}</h3>
-        <div className="text-brand-purple">
+        <div>
+          <h3 className="text-xl font-bold bg-gradient-to-r from-brand-orange to-brand-purple bg-clip-text text-transparent">{title}</h3>
+        </div>
+        <button 
+          type="button"
+          onClick={onToggle}
+          aria-label={isOpen ? 'Cerrar sección' : 'Abrir sección'}
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple text-white shadow-md focus:outline-none transition-transform duration-300 transform hover:scale-105"
+        >
           {isOpen ? (
             <ChevronUpIcon className="h-5 w-5" />
           ) : (
             <ChevronDownIcon className="h-5 w-5" />
           )}
-        </div>
+        </button>
       </div>
-      {isOpen && (
-        <div className="p-4 border-t border-gray-200 bg-white">
-          {children}
-        </div>
-      )}
+      <div className={`p-6 ${isOpen ? 'block animate-fadeIn' : 'hidden'}`}>
+        {children}
+      </div>
     </div>
   );
 };
@@ -231,13 +238,28 @@ export default function TipsPolicy() {
     if (availableLocations.length > 0) {
       setOpenAccordions(prev => ({ ...prev, [availableLocations[0].id]: true }));
     }
-  }, [state.locations, formData.locations]);
+    
+    // Inicializar acordeones para grupos existentes
+    if (state.tipsPolicy?.locationGroups) {
+      Object.keys(state.tipsPolicy.locationGroups).forEach(groupId => {
+        // Abre automáticamente el primer grupo
+        if (Object.keys(state.tipsPolicy.locationGroups).indexOf(groupId) === 0) {
+          setOpenAccordions(prev => ({ ...prev, [groupId]: true }));
+        }
+      });
+    }
+  }, [state.locations, formData.locations, state.tipsPolicy?.locationGroups]);
 
   const toggleAccordion = (id: string) => {
-    setOpenAccordions(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+    console.log(`Toggling accordion for ${id}, current state: ${!!openAccordions[id]}`);
+    setOpenAccordions(prev => {
+      const newState = {
+        ...prev,
+        [id]: !prev[id]
+      };
+      console.log("New accordion states:", newState);
+      return newState;
+    });
   };
 
   const getEmptyPolicyObject = (): PolicyObject => ({
@@ -275,7 +297,7 @@ export default function TipsPolicy() {
   };
 
   const initialValues: FormValues = {
-    useGroups: state.tipsPolicy?.useGroups || false,
+    policyMode: state.tipsPolicy?.policyMode || 'individual',
     locationPolicies: ensureLocationPolicies(),
     groupPolicies: state.menuGroups.map(group => ({
       groupId: group.name,
@@ -283,6 +305,7 @@ export default function TipsPolicy() {
       ...getEmptyPolicyObject(),
       ...state.tipsPolicy?.groupPolicies?.[group.name]
     })),
+    locationGroups: state.tipsPolicy?.locationGroups || {},
   }
 
   // Comunicar cambios al componente padre
@@ -309,9 +332,10 @@ export default function TipsPolicy() {
     dispatch({
       type: 'SET_TIPS_POLICY',
       payload: {
-        useGroups: values.useGroups,
+        policyMode: values.policyMode,
         locationPolicies,
-        groupPolicies
+        groupPolicies,
+        locationGroups: values.locationGroups
       }
     })
     
@@ -364,9 +388,10 @@ export default function TipsPolicy() {
       dispatch({
         type: 'SET_TIPS_POLICY',
         payload: {
-          useGroups: values.useGroups,
+          policyMode: values.policyMode,
           locationPolicies,
-          groupPolicies
+          groupPolicies,
+          locationGroups: values.locationGroups
         }
       })
       navigate('/onboarding/observations')
@@ -462,48 +487,6 @@ export default function TipsPolicy() {
       <div className="border-t border-gray-200 pt-6">
         <h4 className="text-md font-medium text-gray-900 mb-4">Configuración avanzada de propinas</h4>
         
-        {/* Distribución de propinas */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Distribución de propinas entre el personal
-          </label>
-          <select
-            name={`${prefix}.tipDistribution`}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
-            value={values.tipDistribution || "equal"}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-              const newValue = e.target.value;
-              handleFieldChange(`${prefix}.tipDistribution`, newValue);
-              // También actualizar el valor en Formik
-              setFieldValue(`${prefix}.tipDistribution`, newValue);
-            }}
-          >
-            <option value="">Selecciona el método de distribución...</option>
-            {TIP_DISTRIBUTION_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          {values.tipDistribution === 'other' && (
-            <div className="mt-2">
-              <textarea
-                name={`${prefix}.tipDetails`}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
-                rows={2}
-                placeholder="Describe el método de distribución de propinas..."
-                value={values.tipDetails || ""}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                  const newValue = e.target.value;
-                  handleFieldChange(`${prefix}.tipDetails`, newValue);
-                  // También actualizar el valor en Formik
-                  setFieldValue(`${prefix}.tipDetails`, newValue);
-                }}
-              />
-            </div>
-          )}
-        </div>
-
         {/* Porcentajes de propina sugeridos */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -513,14 +496,20 @@ export default function TipsPolicy() {
             {COMMON_TIP_PERCENTAGES.map(percentage => (
               <label 
                 key={percentage} 
-                className="flex items-center cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors"
+                className={`
+                  relative flex items-center justify-center px-4 py-3 rounded-xl cursor-pointer transition-all duration-200
+                  ${Array.isArray(values.suggestedTipPercentages) && values.suggestedTipPercentages.includes(percentage) 
+                    ? 'bg-gradient-to-br from-brand-orange/10 to-brand-purple/10 border-2 border-brand-purple shadow-md' 
+                    : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                  }
+                `}
               >
                 <input
                   type="checkbox"
                   name={`${prefix}.suggestedTipPercentages`}
                   value={percentage}
                   checked={Array.isArray(values.suggestedTipPercentages) ? values.suggestedTipPercentages.includes(percentage) : false}
-                  className="h-5 w-5 rounded border-gray-300 text-brand-purple focus:ring-brand-purple"
+                  className="absolute opacity-0"
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     // Asegurarse de que currentPercentages sea un array
                     const currentPercentages = Array.isArray(values.suggestedTipPercentages) 
@@ -542,7 +531,15 @@ export default function TipsPolicy() {
                     setFieldValue(`${prefix}.suggestedTipPercentages`, currentPercentages);
                   }}
                 />
-                <span className="ml-2 mr-1 text-sm font-medium text-gray-700">{percentage}</span>
+                <span className={`
+                  text-base font-medium 
+                  ${Array.isArray(values.suggestedTipPercentages) && values.suggestedTipPercentages.includes(percentage) 
+                    ? 'text-brand-purple' 
+                    : 'text-gray-700'
+                  }
+                `}>
+                  {percentage}
+                </span>
               </label>
             ))}
           </div>
@@ -551,7 +548,7 @@ export default function TipsPolicy() {
               <input
                 type="text"
                 name={`${prefix}.customTipPercentage`}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
+                className="w-full rounded-xl border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple py-3 px-4 bg-gradient-to-br from-orange-50 to-purple-50"
                 placeholder="Especifica otros porcentajes (ej: 12%, 23%)"
                 value={values.customTipPercentage || ""}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -572,7 +569,7 @@ export default function TipsPolicy() {
           </label>
           <select
             name={`${prefix}.largeGroupPolicy`}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
+            className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange py-3 px-4"
             value={values.largeGroupPolicy || "no_policy"}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
               const newValue = e.target.value;
@@ -590,50 +587,56 @@ export default function TipsPolicy() {
           </select>
 
           {values.largeGroupPolicy === 'automatic' && (
-            <div className="mt-4 grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tamaño mínimo del grupo
-                </label>
-                <input
-                  type="number"
-                  name={`${prefix}.largeGroupMinSize`}
-                  min="1"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
-                  value={values.largeGroupMinSize || 8}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    const newValue = parseInt(e.target.value, 10) || 0;
-                    handleFieldChange(`${prefix}.largeGroupMinSize`, newValue);
-                    // También actualizar el valor en Formik
-                    setFieldValue(`${prefix}.largeGroupMinSize`, newValue);
-                  }}
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Número mínimo de personas para considerar un grupo grande
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Porcentaje de propina automática
-                </label>
-                <div className="mt-1 flex rounded-md shadow-sm">
+            <div className="mt-6 p-5 bg-gradient-to-br from-orange-50 to-purple-50 rounded-xl border border-purple-100 shadow-sm">
+              <h5 className="text-base font-semibold text-brand-purple mb-3">Configuración de propina automática</h5>
+              <div className="grid grid-cols-1 gap-y-4 gap-x-6 sm:grid-cols-2">
+                <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tamaño mínimo del grupo
+                  </label>
                   <input
                     type="number"
-                    name={`${prefix}.largeGroupTipPercentage`}
-                    min="0"
-                    max="100"
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
-                    value={values.largeGroupTipPercentage || 18}
+                    name={`${prefix}.largeGroupMinSize`}
+                    min="1"
+                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange"
+                    value={values.largeGroupMinSize || 8}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const newValue = parseInt(e.target.value, 10) || 0;
-                      handleFieldChange(`${prefix}.largeGroupTipPercentage`, newValue);
+                      handleFieldChange(`${prefix}.largeGroupMinSize`, newValue);
                       // También actualizar el valor en Formik
-                      setFieldValue(`${prefix}.largeGroupTipPercentage`, newValue);
+                      setFieldValue(`${prefix}.largeGroupMinSize`, newValue);
                     }}
                   />
-                  <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
-                    %
-                  </span>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Número mínimo de personas para considerar un grupo grande
+                  </p>
+                </div>
+                <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Porcentaje de propina automática
+                  </label>
+                  <div className="flex rounded-lg shadow-sm">
+                    <input
+                      type="number"
+                      name={`${prefix}.largeGroupTipPercentage`}
+                      min="0"
+                      max="100"
+                      className="block w-full rounded-l-lg border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange"
+                      value={values.largeGroupTipPercentage || 18}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const newValue = parseInt(e.target.value, 10) || 0;
+                        handleFieldChange(`${prefix}.largeGroupTipPercentage`, newValue);
+                        // También actualizar el valor en Formik
+                        setFieldValue(`${prefix}.largeGroupTipPercentage`, newValue);
+                      }}
+                    />
+                    <span className="inline-flex items-center px-4 rounded-r-lg border border-l-0 border-gray-300 bg-gradient-to-r from-brand-orange to-brand-purple text-white">
+                      %
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Porcentaje que se aplicará automáticamente
+                  </p>
                 </div>
               </div>
             </div>
@@ -642,42 +645,52 @@ export default function TipsPolicy() {
 
         {/* Política para eventos y catering */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Política para eventos y catering
-          </label>
-          <textarea
-            name={`${prefix}.eventCateringPolicy`}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
-            rows={3}
-            placeholder="Describe la política de propinas para eventos privados y servicios de catering..."
-            value={values.eventCateringPolicy || ""}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-              const newValue = e.target.value;
-              handleFieldChange(`${prefix}.eventCateringPolicy`, newValue);
-              // También actualizar el valor en Formik
-              setFieldValue(`${prefix}.eventCateringPolicy`, newValue);
-            }}
-          />
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+            <label className="block text-base font-medium text-gray-700 mb-3">
+              Política para eventos y catering
+            </label>
+            <p className="text-sm text-gray-500 mb-4">
+              Define cómo manejan las propinas para servicios de eventos especiales y catering
+            </p>
+            <textarea
+              name={`${prefix}.eventCateringPolicy`}
+              className="w-full rounded-xl border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange py-3 px-4 bg-gradient-to-br from-orange-50/30 to-purple-50/30"
+              rows={3}
+              placeholder="Describe la política de propinas para eventos privados y servicios de catering..."
+              value={values.eventCateringPolicy || ""}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                const newValue = e.target.value;
+                handleFieldChange(`${prefix}.eventCateringPolicy`, newValue);
+                // También actualizar el valor en Formik
+                setFieldValue(`${prefix}.eventCateringPolicy`, newValue);
+              }}
+            />
+          </div>
         </div>
 
         {/* Manejo de propinas con tarjeta vs efectivo */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Manejo de propinas con tarjeta vs efectivo
-          </label>
-          <textarea
-            name={`${prefix}.cardVsCashPolicy`}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
-            rows={3}
-            placeholder="¿Existe alguna diferencia en el manejo de propinas según el método de pago? Descríbela aquí..."
-            value={values.cardVsCashPolicy || ""}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-              const newValue = e.target.value;
-              handleFieldChange(`${prefix}.cardVsCashPolicy`, newValue);
-              // También actualizar el valor en Formik
-              setFieldValue(`${prefix}.cardVsCashPolicy`, newValue);
-            }}
-          />
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+            <label className="block text-base font-medium text-gray-700 mb-3">
+              Manejo de propinas con tarjeta vs efectivo
+            </label>
+            <p className="text-sm text-gray-500 mb-4">
+              Especifica si hay diferencias en el manejo de propinas según el método de pago
+            </p>
+            <textarea
+              name={`${prefix}.cardVsCashPolicy`}
+              className="w-full rounded-xl border-gray-300 shadow-sm focus:border-brand-orange focus:ring-brand-orange py-3 px-4 bg-gradient-to-br from-orange-50/30 to-purple-50/30"
+              rows={3}
+              placeholder="¿Existe alguna diferencia en el manejo de propinas según el método de pago? Descríbela aquí..."
+              value={values.cardVsCashPolicy || ""}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                const newValue = e.target.value;
+                handleFieldChange(`${prefix}.cardVsCashPolicy`, newValue);
+                // También actualizar el valor en Formik
+                setFieldValue(`${prefix}.cardVsCashPolicy`, newValue);
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -693,15 +706,23 @@ export default function TipsPolicy() {
     return (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">¿Tu restaurante acepta propinas?</label>
-        <div className="mt-2 space-y-3">
-          <div className="flex items-center">
+        <label className="block text-sm font-medium text-gray-700 mb-3">¿Tu restaurante acepta propinas?</label>
+        <div className="mt-2 space-y-4">
+          <label
+            className={`
+              flex items-center p-4 rounded-lg cursor-pointer transition-all duration-200
+              ${values.hasTips === 'yes' 
+                ? 'bg-gradient-to-br from-brand-orange/10 to-brand-purple/10 border-2 border-brand-purple shadow-md' 
+                : 'bg-white border border-gray-200 hover:bg-gray-50'
+              }
+            `}
+          >
             <input
               type="radio"
               name={`${prefix}.hasTips`}
               value="yes"
               id={`${prefix}-tips-yes`}
-              className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
+              className="h-5 w-5 text-brand-purple focus:ring-brand-purple border-gray-300"
               checked={values.hasTips === "yes"}
               onChange={() => {
                 handleFieldChange(`${prefix}.hasTips`, "yes");
@@ -709,17 +730,25 @@ export default function TipsPolicy() {
                 setFieldValue(`${prefix}.hasTips`, "yes");
               }}
             />
-            <label htmlFor={`${prefix}-tips-yes`} className="ml-3 block text-sm text-gray-700">
+            <span className="ml-3 block font-medium text-gray-700">
               Sí, aceptamos propinas
-            </label>
-          </div>
-          <div className="flex items-center">
+            </span>
+          </label>
+          <label
+            className={`
+              flex items-center p-4 rounded-lg cursor-pointer transition-all duration-200
+              ${values.hasTips === 'no' 
+                ? 'bg-gradient-to-br from-brand-orange/10 to-brand-purple/10 border-2 border-brand-purple shadow-md' 
+                : 'bg-white border border-gray-200 hover:bg-gray-50'
+              }
+            `}
+          >
             <input
               type="radio"
               name={`${prefix}.hasTips`}
               value="no"
               id={`${prefix}-tips-no`}
-              className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
+              className="h-5 w-5 text-brand-purple focus:ring-brand-purple border-gray-300"
               checked={values.hasTips === "no"}
               onChange={() => {
                 handleFieldChange(`${prefix}.hasTips`, "no");
@@ -727,17 +756,25 @@ export default function TipsPolicy() {
                 setFieldValue(`${prefix}.hasTips`, "no");
               }}
             />
-            <label htmlFor={`${prefix}-tips-no`} className="ml-3 block text-sm text-gray-700">
+            <span className="ml-3 block font-medium text-gray-700">
               No, no aceptamos propinas
-            </label>
-          </div>
-          <div className="flex items-center">
+            </span>
+          </label>
+          <label
+            className={`
+              flex items-center p-4 rounded-lg cursor-pointer transition-all duration-200
+              ${values.hasTips === 'depends' 
+                ? 'bg-gradient-to-br from-brand-orange/10 to-brand-purple/10 border-2 border-brand-purple shadow-md' 
+                : 'bg-white border border-gray-200 hover:bg-gray-50'
+              }
+            `}
+          >
             <input
               type="radio"
               name={`${prefix}.hasTips`}
               value="depends"
               id={`${prefix}-tips-depends`}
-              className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
+              className="h-5 w-5 text-brand-purple focus:ring-brand-purple border-gray-300"
               checked={values.hasTips === "depends"}
               onChange={() => {
                 handleFieldChange(`${prefix}.hasTips`, "depends");
@@ -745,20 +782,20 @@ export default function TipsPolicy() {
                 setFieldValue(`${prefix}.hasTips`, "depends");
               }}
             />
-            <label htmlFor={`${prefix}-tips-depends`} className="ml-3 block text-sm text-gray-700">
+            <span className="ml-3 block font-medium text-gray-700">
               Depende (especificar)
-            </label>
-          </div>
+            </span>
+          </label>
         </div>
       </div>
       
       {values.hasTips === 'depends' && (
-        <div className="pl-6 border-l-2 border-brand-purple-100">
+        <div className="mt-4 mb-6 bg-gradient-to-br from-orange-50 to-purple-50 rounded-xl p-5 border border-purple-100 shadow-sm">
           <label className="block text-sm font-medium text-gray-700 mb-2">Detalle de política de propinas</label>
           <textarea
             name={`${prefix}.tipDetails`}
             id={`${prefix}-tip-details`}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
+            className="w-full rounded-xl border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple py-3 px-4 bg-white"
             rows={3}
             placeholder="Explica en qué casos se aceptan propinas y en cuáles no..."
             value={values.tipDetails || ""}
@@ -773,12 +810,12 @@ export default function TipsPolicy() {
       )}
 
       {values.hasTips === 'yes' && (
-        <div className="pl-6 border-l-2 border-brand-purple-100">
+        <div className="mt-4 mb-6 bg-gradient-to-br from-orange-50 to-purple-50 rounded-xl p-5 border border-purple-100 shadow-sm">
           <label className="block text-sm font-medium text-gray-700 mb-2">Detalles sobre las propinas (opcional)</label>
           <textarea
             name={`${prefix}.tipDetails`}
             id={`${prefix}-tip-details`}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
+            className="w-full rounded-xl border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple py-3 px-4 bg-white"
             rows={3}
             placeholder="Propinas sugeridas, política específica, etc."
             value={values.tipDetails || ""}
@@ -793,15 +830,23 @@ export default function TipsPolicy() {
       )}
       
       <div className="mt-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">¿Tu restaurante cobra cargo por servicio?</label>
-        <div className="mt-2 space-y-3">
-          <div className="flex items-center">
+        <label className="block text-sm font-medium text-gray-700 mb-3">¿Tu restaurante cobra cargo por servicio?</label>
+        <div className="mt-2 space-y-4">
+          <label
+            className={`
+              flex items-center p-4 rounded-lg cursor-pointer transition-all duration-200
+              ${values.hasServiceCharge === true 
+                ? 'bg-gradient-to-br from-brand-orange/10 to-brand-purple/10 border-2 border-brand-purple shadow-md' 
+                : 'bg-white border border-gray-200 hover:bg-gray-50'
+              }
+            `}
+          >
             <input
               type="radio"
               name={`${prefix}.hasServiceCharge`}
               value="true"
               id={`${prefix}-service-charge-yes`}
-              className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
+              className="h-5 w-5 text-brand-purple focus:ring-brand-purple border-gray-300"
               checked={values.hasServiceCharge === true}
               onChange={() => {
                 handleFieldChange(`${prefix}.hasServiceCharge`, true);
@@ -809,17 +854,25 @@ export default function TipsPolicy() {
                 setFieldValue(`${prefix}.hasServiceCharge`, true);
               }}
             />
-            <label htmlFor={`${prefix}-service-charge-yes`} className="ml-3 block text-sm text-gray-700">
+            <span className="ml-3 block font-medium text-gray-700">
               Sí, cobramos cargo por servicio
-            </label>
-          </div>
-          <div className="flex items-center">
+            </span>
+          </label>
+          <label
+            className={`
+              flex items-center p-4 rounded-lg cursor-pointer transition-all duration-200
+              ${values.hasServiceCharge === false 
+                ? 'bg-gradient-to-br from-brand-orange/10 to-brand-purple/10 border-2 border-brand-purple shadow-md' 
+                : 'bg-white border border-gray-200 hover:bg-gray-50'
+              }
+            `}
+          >
             <input
               type="radio"
               name={`${prefix}.hasServiceCharge`}
               value="false"
               id={`${prefix}-service-charge-no`}
-              className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
+              className="h-5 w-5 text-brand-purple focus:ring-brand-purple border-gray-300"
               checked={values.hasServiceCharge === false}
               onChange={() => {
                 handleFieldChange(`${prefix}.hasServiceCharge`, false);
@@ -827,20 +880,20 @@ export default function TipsPolicy() {
                 setFieldValue(`${prefix}.hasServiceCharge`, false);
               }}
             />
-            <label htmlFor={`${prefix}-service-charge-no`} className="ml-3 block text-sm text-gray-700">
+            <span className="ml-3 block font-medium text-gray-700">
               No, no cobramos cargo por servicio
-            </label>
-          </div>
+            </span>
+          </label>
         </div>
       </div>
       
       {values.hasServiceCharge && (
-        <div className="pl-6 border-l-2 border-brand-purple-100">
+        <div className="mt-4 mb-6 bg-gradient-to-br from-orange-50 to-purple-50 rounded-xl p-5 border border-purple-100 shadow-sm">
           <label className="block text-sm font-medium text-gray-700 mb-2">Detalles del cargo por servicio</label>
           <textarea
             name={`${prefix}.serviceChargeDetails`}
             id={`${prefix}-service-charge-details`}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple sm:text-sm"
+            className="w-full rounded-xl border-gray-300 shadow-sm focus:border-brand-purple focus:ring-brand-purple py-3 px-4 bg-white"
             rows={3}
             placeholder="Porcentaje del cargo, en qué situaciones se aplica, etc."
             value={values.serviceChargeDetails || ""}
@@ -865,196 +918,537 @@ export default function TipsPolicy() {
   )};
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Política de Propinas</h1>
+    <div className="min-h-screen bg-white px-4 py-8 pb-24">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-brand-orange to-brand-purple">
+            Política de Propinas
+          </h2>
+          <p className="mt-3 text-gray-600">
+            Define cómo quieres manejar la política de propinas y cargos por servicio en tu restaurante.
+          </p>
+        </div>
       
-      {showNotification && (
-        <Notification
-          message="Los cambios han sido guardados correctamente"
-          onClose={() => setShowNotification(false)}
-        />
-      )}
-      
-      <SavePrompt />
-      
-      <Formik
-        initialValues={initialValues}
-        validationSchema={validationSchema}
-        onSubmit={handleSubmit}
-        enableReinitialize
-      >
-        {({ isSubmitting, values, setFieldValue, errors, touched, ...formikProps }) => (
-          <Form className="space-y-6" data-formik-values={JSON.stringify(values)}>
-            <SectionCard title="Configuración general">
-              <div className="mb-6">
-                <p className="text-sm text-gray-600 mb-4">
-                  Define cómo quieres manejar la política de propinas y cargos por servicio en tu restaurante.
-                  Puedes configurar una política única para todas las ubicaciones o establecer políticas específicas por ubicación.
-                </p>
-                
-                <div className="bg-gray-50 p-4 rounded-md border border-gray-200 mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">¿Deseas usar políticas específicas por ubicación?</label>
-                  <div className="space-y-3">
-                    <div className="flex items-center">
-                      <input
-                        type="radio"
-                        name="useGroups"
-                        value="true"
-                        id="use-groups-yes"
-                        className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
-                        checked={values.useGroups === true}
-                        onChange={() => {
-                          setFieldValue('useGroups', true);
-                          handleFieldChange('useGroups', true);
-                        }}
-                      />
-                      <label htmlFor="use-groups-yes" className="ml-3 block text-sm text-gray-700">
-                        Sí, usar políticas específicas por ubicación
+        {showNotification && (
+          <Notification
+            message="Los cambios han sido guardados correctamente"
+            onClose={() => setShowNotification(false)}
+          />
+        )}
+        
+        <SavePrompt />
+        
+        <Formik
+          initialValues={initialValues}
+          validationSchema={validationSchema}
+          onSubmit={handleSubmit}
+          enableReinitialize
+        >
+          {({ isSubmitting, values, setFieldValue, errors, touched, ...formikProps }) => (
+            <Form className="space-y-6" data-formik-values={JSON.stringify(values)}>
+              <SectionCard title="Configuración general">
+                <div className="mb-6">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Define cómo quieres manejar la política de propinas y cargos por servicio en tu restaurante.
+                    Puedes configurar una política única para todas las ubicaciones o establecer políticas específicas por ubicación.
+                  </p>
+                  
+                  <div className="bg-gradient-to-br from-orange-50 to-purple-50 p-5 rounded-xl border border-purple-100 shadow-sm">
+                    <h4 className="text-lg font-semibold mb-4 bg-gradient-to-r from-brand-orange to-brand-purple bg-clip-text text-transparent">¿Cómo quieres configurar las políticas de propinas?</h4>
+                    <div className="space-y-4">
+                      <label 
+                        className={`
+                          flex items-center p-4 rounded-lg cursor-pointer transition-all duration-200
+                          ${values.policyMode === 'individual' 
+                            ? 'bg-white border-2 border-brand-purple shadow-md' 
+                            : 'bg-white/60 border border-gray-200 hover:bg-white'
+                          }
+                        `}
+                      >
+                        <input
+                          type="radio"
+                          name="policyMode"
+                          value="individual"
+                          id="policy-mode-individual"
+                          className="h-5 w-5 text-brand-purple focus:ring-brand-purple border-gray-300"
+                          checked={values.policyMode === 'individual'}
+                          onChange={() => {
+                            setFieldValue('policyMode', 'individual');
+                            handleFieldChange('policyMode', 'individual');
+                          }}
+                        />
+                        <div className="ml-3">
+                          <span className="block text-base font-medium text-gray-700">
+                            Configurar cada ubicación por separado
+                          </span>
+                          <span className="block text-sm text-gray-500 mt-1">
+                            Cada ubicación tendrá su propia configuración de propinas
+                          </span>
+                        </div>
                       </label>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        type="radio"
-                        name="useGroups"
-                        value="false"
-                        id="use-groups-no"
-                        className="h-4 w-4 text-brand-purple focus:ring-brand-purple border-gray-300"
-                        checked={values.useGroups === false}
-                        onChange={() => {
-                          setFieldValue('useGroups', false);
-                          handleFieldChange('useGroups', false);
-                        }}
-                      />
-                      <label htmlFor="use-groups-no" className="ml-3 block text-sm text-gray-700">
-                        No, usar una política única para todas las ubicaciones
+                      
+                      <label 
+                        className={`
+                          flex items-center p-4 rounded-lg cursor-pointer transition-all duration-200
+                          ${values.policyMode === 'grouped' 
+                            ? 'bg-white border-2 border-brand-purple shadow-md' 
+                            : 'bg-white/60 border border-gray-200 hover:bg-white'
+                          }
+                        `}
+                      >
+                        <input
+                          type="radio"
+                          name="policyMode"
+                          value="grouped"
+                          id="policy-mode-grouped"
+                          className="h-5 w-5 text-brand-purple focus:ring-brand-purple border-gray-300"
+                          checked={values.policyMode === 'grouped'}
+                          onChange={() => {
+                            setFieldValue('policyMode', 'grouped');
+                            handleFieldChange('policyMode', 'grouped');
+                          }}
+                        />
+                        <div className="ml-3">
+                          <span className="block text-base font-medium text-gray-700">
+                            Agrupar ubicaciones con políticas idénticas
+                          </span>
+                          <span className="block text-sm text-gray-500 mt-1">
+                            Crea grupos de ubicaciones que comparten exactamente las mismas políticas
+                          </span>
+                        </div>
+                      </label>
+                      
+                      <label 
+                        className={`
+                          flex items-center p-4 rounded-lg cursor-pointer transition-all duration-200
+                          ${values.policyMode === 'single' 
+                            ? 'bg-white border-2 border-brand-purple shadow-md' 
+                            : 'bg-white/60 border border-gray-200 hover:bg-white'
+                          }
+                        `}
+                      >
+                        <input
+                          type="radio"
+                          name="policyMode"
+                          value="single"
+                          id="policy-mode-single"
+                          className="h-5 w-5 text-brand-purple focus:ring-brand-purple border-gray-300"
+                          checked={values.policyMode === 'single'}
+                          onChange={() => {
+                            setFieldValue('policyMode', 'single');
+                            handleFieldChange('policyMode', 'single');
+                          }}
+                        />
+                        <div className="ml-3">
+                          <span className="block text-base font-medium text-gray-700">
+                            Usar una política única para todas las ubicaciones
+                          </span>
+                          <span className="block text-sm text-gray-500 mt-1">
+                            Aplicar la misma configuración de propinas a todos tus restaurantes
+                          </span>
+                        </div>
                       </label>
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              {!values.useGroups && (
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">Política única para todas las ubicaciones</h3>
-                  {/* Siempre mostramos el formulario de política única */}
-                  {(() => {
-                    // Usar la primera ubicación como referencia para la política única, o una predeterminada si no hay
-                    const firstLocation = locations.length > 0 
-                      ? locations[0] 
-                      : { id: 'default', name: 'Todas las ubicaciones' };
-                    
-                    const locationPolicyIndex = values.locationPolicies.findIndex(p => p.locationId === firstLocation.id);
-                    let locationPolicy;
-                    
-                    if (locationPolicyIndex === -1) {
-                      // Si no existe una política para esta ubicación, usar el objeto vacío
-                      locationPolicy = { 
-                        locationId: firstLocation.id, 
-                        ...getEmptyPolicyObject() 
-                      };
-                    } else {
-                      // Si existe, usarla
-                      locationPolicy = values.locationPolicies[locationPolicyIndex];
-                    }
-
-                    return renderPolicyFields(
-                      `locationPolicies.${locationPolicyIndex !== -1 ? locationPolicyIndex : 0}`,
-                      locationPolicy,
-                      { errors, touched, setFieldValue },
-                      firstLocation.id
-                    );
-                  })()}
-                </div>
-              )}
-            </SectionCard>
-            
-            {values.useGroups && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Políticas por ubicación</h3>
                 
-                {/* Verificar si hay ubicaciones configuradas */}
-                {locations.length === 0 ? (
-                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                    <div className="flex">
-                      <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
+                {/* Renderizar el contenido adecuado según el modo de política seleccionado */}
+                {values.policyMode === 'individual' && (
+                  <>
+                    <div className="mt-8 space-y-4">
+                      {values.locationPolicies.map((policy, index) => {
+                        const location = locations.find(loc => loc.id === policy.locationId);
+                        return (
+                          <Accordion
+                            key={policy.locationId}
+                            title={`Política para ${location?.name || 'Ubicación'}`}
+                            isOpen={!!openAccordions[policy.locationId]}
+                            onToggle={() => toggleAccordion(policy.locationId)}
+                          >
+                            {renderPolicyFields(
+                              `locationPolicies.${policy.locationId}`,
+                              policy,
+                              { errors, touched, setFieldValue },
+                              policy.locationId
+                            )}
+                          </Accordion>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {values.policyMode === 'grouped' && (
+                  <>
+                    <div className="mt-8">
+                      <div className="flex justify-between mb-6">
+                        <h3 className="text-3xl font-bold text-brand-orange">
+                          Grupos de Propinas
+                        </h3>
                       </div>
-                      <div className="ml-3">
-                        <p className="text-sm text-yellow-700">
-                          No hay ubicaciones configuradas. Por favor, añade y confirma ubicaciones en el paso de Datos Legales.
-                        </p>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Generar un nombre de grupo automático (Grupo A, Grupo B, etc.)
+                          const existingGroups = Object.keys(values.locationGroups);
+                          
+                          // Determinar la siguiente letra
+                          let nextGroupLetter = 'A';
+                          const usedLetters = existingGroups
+                            .filter(name => name.startsWith('Grupo '))
+                            .map(name => name.replace('Grupo ', ''));
+                          
+                          if (usedLetters.length > 0) {
+                            // Encontrar la próxima letra disponible
+                            for (let charCode = 65; charCode <= 90; charCode++) {
+                              const letter = String.fromCharCode(charCode);
+                              if (!usedLetters.includes(letter)) {
+                                nextGroupLetter = letter;
+                                break;
+                              }
+                            }
+                          }
+                          
+                          const groupName = `Grupo ${nextGroupLetter}`;
+                          
+                          if (values.locationGroups[groupName]) {
+                            alert('Ya existe un grupo con ese nombre. Por favor, elimine algún grupo existente primero.');
+                            return;
+                          }
+                          
+                          // Crear el nuevo grupo
+                          const updatedGroups = { 
+                            ...values.locationGroups,
+                            [groupName]: []
+                          };
+                          
+                          setFieldValue('locationGroups', updatedGroups);
+                          handleFieldChange('locationGroups', updatedGroups);
+                          
+                          // También crear una política para este grupo
+                          const updatedGroupPolicies = [...values.groupPolicies];
+                          updatedGroupPolicies.push({
+                            groupId: groupName,
+                            locations: [],
+                            ...getEmptyPolicyObject()
+                          });
+                          
+                          setFieldValue('groupPolicies', updatedGroupPolicies);
+                          handleFieldChange('groupPolicies', updatedGroupPolicies);
+                          
+                          // Abrir automáticamente el acordeón para el nuevo grupo
+                          setTimeout(() => {
+                            console.log(`Abriendo acordeón para nuevo grupo: ${groupName}`);
+                            
+                            // Forzar apertura del acordeón del nuevo grupo
+                            setOpenAccordions(prev => ({
+                              ...prev,
+                              [groupName]: true
+                            }));
+                            
+                            // Hacer scroll hacia el acordeón
+                            setTimeout(() => {
+                              const element = document.getElementById(`policy-${groupName}`);
+                              if (element) {
+                                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              } else {
+                                console.log(`No se encontró el elemento policy-${groupName} para hacer scroll`);
+                              }
+                            }, 300);
+                          }, 100);
+                        }}
+                        className="flex items-center justify-center px-8 py-4 rounded-full font-medium text-white bg-gradient-to-r from-brand-orange to-brand-purple hover:opacity-90 transition-colors mb-8"
+                      >
+                        <span className="text-lg mr-2">+</span> Agregar Grupo
+                      </button>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Object.entries(values.locationGroups).map(([groupId, locationIds], index) => {
+                          // Definir gradientes diferentes para cada grupo
+                          const gradients = [
+                            'from-pink-400 to-orange-400', // rosa a naranja
+                            'from-indigo-400 to-blue-400', // índigo a azul
+                            'from-green-400 to-teal-400',  // verde a teal
+                            'from-yellow-400 to-orange-400' // amarillo a naranja
+                          ];
+                          
+                          const gradient = gradients[index % gradients.length];
+                          
+                          return (
+                            <div 
+                              key={groupId} 
+                              className={`relative rounded-xl p-6 text-white bg-gradient-to-br ${gradient} shadow-lg`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Eliminar grupo
+                                  const updatedGroups = { ...values.locationGroups };
+                                  delete updatedGroups[groupId];
+                                  setFieldValue('locationGroups', updatedGroups);
+                                  handleFieldChange('locationGroups', updatedGroups);
+                                  
+                                  // Eliminar la política asociada
+                                  const updatedPolicies = values.groupPolicies.filter(
+                                    policy => policy.groupId !== groupId
+                                  );
+                                  setFieldValue('groupPolicies', updatedPolicies);
+                                  handleFieldChange('groupPolicies', updatedPolicies);
+                                }}
+                                className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center bg-white bg-opacity-30 rounded-full hover:bg-opacity-50 transition-all"
+                                aria-label="Eliminar grupo"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                              
+                              <h4 className="text-2xl font-bold mb-6">{groupId}</h4>
+                              
+                              <div className="mb-4">
+                                <div className="flex items-center mb-2">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  </svg>
+                                  <span className="font-medium">Ubicaciones</span>
+                                </div>
+                                
+                                <div className="space-y-2 bg-white bg-opacity-20 rounded-lg p-3">
+                                  {locations.map(loc => {
+                                    // Verificar si la ubicación ya está en este grupo
+                                    const isInThisGroup = locationIds.includes(loc.id);
+                                    // Verificar si está en cualquier otro grupo
+                                    const isInAnotherGroup = Object.entries(values.locationGroups).some(
+                                      ([gId, locs]) => gId !== groupId && locs.includes(loc.id)
+                                    );
+                                    
+                                    // No mostrar ubicaciones que ya están en otros grupos
+                                    if (isInAnotherGroup && !isInThisGroup) {
+                                      return null;
+                                    }
+                                    
+                                    return (
+                                      <div key={loc.id} className="flex items-center p-2 hover:bg-white hover:bg-opacity-10 rounded">
+                                        <input
+                                          type="checkbox"
+                                          id={`${groupId}-${loc.id}`}
+                                          checked={isInThisGroup}
+                                          onChange={(e) => {
+                                            const isChecked = e.target.checked;
+                                            const updatedGroups = { ...values.locationGroups };
+                                            
+                                            if (isChecked) {
+                                              // Añadir ubicación al grupo
+                                              updatedGroups[groupId] = [...updatedGroups[groupId], loc.id];
+                                            } else {
+                                              // Eliminar ubicación del grupo
+                                              updatedGroups[groupId] = updatedGroups[groupId].filter(id => id !== loc.id);
+                                            }
+                                            
+                                            setFieldValue('locationGroups', updatedGroups);
+                                            handleFieldChange('locationGroups', updatedGroups);
+                                          }}
+                                          className="h-5 w-5 rounded border-white text-brand-purple focus:ring-brand-purple"
+                                        />
+                                        <label htmlFor={`${groupId}-${loc.id}`} className="ml-3 block text-sm">
+                                          {loc.name}
+                                        </label>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                
+                                <div className="mt-4 flex justify-center">
+                                  <span className="px-4 py-1 bg-white bg-opacity-30 rounded-full text-sm">
+                                    {locationIds.length}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                    </div>
+                    
+                    {/* Sección de configuración de políticas para grupos */}
+                    <div className="mt-12">
+                      <h3 className="text-2xl font-bold text-brand-orange pb-2 border-b border-gray-200 mb-6">
+                        Configuración de Políticas para Grupos
+                      </h3>
+                      
+                      {Object.entries(values.locationGroups).length === 0 ? (
+                        <div className="bg-gray-50 rounded-lg p-6 text-center">
+                          <p className="text-gray-600">Aún no has creado grupos de propinas. Crea un grupo para configurar su política.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-6">
+                          {Object.entries(values.locationGroups).map(([groupId, locationIds]) => {
+                            // Buscar la política correspondiente a este grupo
+                            const policyIndex = values.groupPolicies.findIndex(policy => policy.groupId === groupId);
+                            
+                            // Si no existe política para este grupo, omitirlo 
+                            // (debería haber sido creado al crear el grupo)
+                            if (policyIndex === -1) return null;
+                            
+                            // Obtener la política
+                            const policy = values.groupPolicies[policyIndex];
+                            
+                            return (
+                              <div 
+                                key={groupId}
+                                className="bg-white shadow-lg rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl border border-gray-200"
+                              >
+                                <div 
+                                  className="p-5 cursor-pointer flex flex-wrap justify-between items-center border-b border-gray-100"
+                                  onClick={() => toggleAccordion(groupId)}
+                                >
+                                  <div className="flex-1">
+                                    <h3 className="text-xl font-bold bg-gradient-to-r from-brand-orange to-brand-purple bg-clip-text text-transparent">
+                                      Política para {groupId} 
+                                    </h3>
+                                    <div className="mt-1 text-sm text-gray-500">
+                                      {locationIds.length} {locationIds.length === 1 ? 'ubicación' : 'ubicaciones'} seleccionadas
+                                    </div>
+                                  </div>
+                                  <button 
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleAccordion(groupId);
+                                    }}
+                                    aria-label={openAccordions[groupId] ? 'Cerrar sección' : 'Abrir sección'}
+                                    className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple text-white shadow-md focus:outline-none transition-transform duration-300 transform hover:scale-105"
+                                  >
+                                    {openAccordions[groupId] ? (
+                                      <ChevronUpIcon className="h-5 w-5" />
+                                    ) : (
+                                      <ChevronDownIcon className="h-5 w-5" />
+                                    )}
+                                  </button>
+                                </div>
+                                
+                                <div className={`p-6 ${openAccordions[groupId] ? 'block animate-fadeIn' : 'hidden'}`} id={`policy-${groupId}`}>
+                                  {/* Listado de ubicaciones del grupo */}
+                                  {locationIds.length > 0 ? (
+                                    <>
+                                      <div className="mb-6 bg-gray-50 p-4 rounded-lg">
+                                        <h4 className="text-sm font-semibold text-gray-600 mb-2">Ubicaciones en este grupo:</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                          {locationIds.map(locId => {
+                                            const location = locations.find(l => l.id === locId);
+                                            return (
+                                              <span 
+                                                key={locId} 
+                                                className="inline-block px-3 py-1 bg-white rounded-full text-sm border border-gray-200"
+                                              >
+                                                {location?.name || locId}
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Formulario de políticas */}
+                                      {renderPolicyFields(
+                                        `groupPolicies.${policyIndex}`,
+                                        policy,
+                                        { errors, touched, setFieldValue },
+                                        groupId
+                                      )}
+                                    </>
+                                  ) : (
+                                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+                                      <div className="flex items-start">
+                                        <svg className="h-5 w-5 text-yellow-400 mt-0.5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                        <div>
+                                          <h4 className="text-sm font-semibold text-yellow-800 mb-1">No hay ubicaciones en este grupo</h4>
+                                          <p className="text-sm text-yellow-700">
+                                            Agrega al menos una ubicación al grupo para poder configurar su política de propinas.
+                                            Puedes hacerlo seleccionando las ubicaciones en la tarjeta del grupo.
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {values.policyMode === 'single' && (
+                  <div className="mt-8">
+                    <SectionCard title="Política de propinas para todas las ubicaciones">
+                      {values.locationPolicies.length > 0 ? (
+                        renderPolicyFields(
+                          'locationPolicies.default',
+                          values.locationPolicies[0],
+                          { errors, touched, setFieldValue },
+                          'default'
+                        )
+                      ) : (
+                        <p className="text-gray-600">No hay políticas configuradas</p>
+                      )}
+                    </SectionCard>
+                  </div>
+                )}
+              </SectionCard>
+              
+              <div className="fixed bottom-0 left-0 right-0 py-4 px-6 bg-white border-t border-gray-200 flex justify-between items-center z-10">
+                {!hasUnsavedChanges ? (
+                  <div className="flex items-center bg-green-50 border border-green-100 rounded-md px-4 py-3">
+                    <svg className="w-5 h-5 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path>
+                    </svg>
+                    <div>
+                      <div className="text-green-700 font-medium">Cambios guardados</div>
+                      <div className="text-green-600 text-sm">Todo está al día</div>
                     </div>
                   </div>
                 ) : (
-                  // Renderizar los acordeones de ubicación cuando hay ubicaciones configuradas
-                  locations.map(location => {
-                    // Encontrar o crear la política para esta ubicación
-                    const locationPolicyIndex = values.locationPolicies.findIndex(p => p.locationId === location.id);
-                    let locationPolicy;
-                    
-                    if (locationPolicyIndex === -1) {
-                      // Si no existe una política para esta ubicación, usar el objeto vacío
-                      locationPolicy = { 
-                        locationId: location.id, 
-                        ...getEmptyPolicyObject() 
-                      };
-                    } else {
-                      // Si existe, usarla
-                      locationPolicy = values.locationPolicies[locationPolicyIndex];
-                    }
-                    
-                    return (
-                      <Accordion 
-                        key={location.id} 
-                        title={`Política para: ${location.name}`}
-                        isOpen={!!openAccordions[location.id]}
-                        onToggle={() => toggleAccordion(location.id)}
-                      >
-                        {renderPolicyFields(
-                          `locationPolicies.${locationPolicyIndex !== -1 ? locationPolicyIndex : values.locationPolicies.length}`,
-                          locationPolicy,
-                          { errors, touched, setFieldValue },
-                          location.id
-                        )}
-                      </Accordion>
-                    );
-                  })
+                  <button
+                    type="button"
+                    onClick={() => navigate('/onboarding/menu-config')}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    Atrás
+                  </button>
                 )}
+
+                <div className="flex space-x-4">
+                  {hasUnsavedChanges ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSave(values)}
+                      className="px-6 py-3 border border-brand-orange text-brand-orange font-medium rounded-full hover:bg-orange-50 transition-colors"
+                    >
+                      Guardar cambios
+                    </button>
+                  ) : (
+                    <button disabled className="px-6 py-3 bg-gray-100 text-gray-500 font-medium rounded-full">
+                      Cambios guardados
+                    </button>
+                  )}
+                  <button 
+                    type="submit"
+                    className="px-6 py-3 bg-gradient-to-r from-brand-orange to-brand-purple text-white font-medium rounded-full hover:opacity-90 transition-colors"
+                  >
+                    Continuar
+                  </button>
+                </div>
               </div>
-            )}
-            
-            <div className="flex justify-between pt-4">
-              <button
-                type="button"
-                onClick={() => navigate('/onboarding/menu-config')}
-                className="btn-secondary"
-              >
-                Atrás
-              </button>
-              <div className="flex space-x-4">
-                <button
-                  type="button"
-                  onClick={() => handleSave(values)}
-                  className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
-                  disabled={!hasUnsavedChanges}
-                >
-                  {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="btn-primary"
-                >
-                  Continuar
-                </button>
-              </div>
-            </div>
-          </Form>
-        )}
-      </Formik>
+            </Form>
+          )}
+        </Formik>
+      </div>
     </div>
   )
 }
