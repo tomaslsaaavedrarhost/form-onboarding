@@ -1,5 +1,4 @@
-import { LocationDetail, WeeklySchedule } from '../context/FormContext'
-import { ExtendedLocationDetail } from '../pages/LocationDetails'
+import { BasicLocationDetail, WeeklySchedule } from '../types/location'
 
 export function createEmptySchedule(): WeeklySchedule {
   const schedule: WeeklySchedule = {}
@@ -13,7 +12,7 @@ export function createEmptySchedule(): WeeklySchedule {
   return schedule
 }
 
-export const createEmptyLocation = (): ExtendedLocationDetail => ({
+export const createEmptyLocation = (): BasicLocationDetail => ({
   locationId: '',
   selectedLocationName: '',
   name: '',
@@ -38,14 +37,6 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
   deliverySettings: {
     platforms: [],
     preferredPlatform: '',
-    preferredPlatformLink: '',
-    deliveryInstructions: '',
-    deliveryRadius: '',
-    minimumOrderAmount: '',
-    claimsHandling: {
-      handledBy: '',
-      restaurantHandledCases: [],
-      additionalDetails: ''
-    }
+    preferredPlatformLink: ''
   }
 }) 
