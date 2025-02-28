@@ -10,8 +10,15 @@ import {
 import { auth } from './firebase'
 import { useNavigate, useLocation } from 'react-router-dom'
 
+// Interfaz para el usuario de demostración
+interface DemoUser {
+  isDemoUser: true;
+  email: string;
+  displayName: string;
+}
+
 interface AuthContextType {
-  user: User | null
+  user: User | DemoUser | null
   loading: boolean
   register: (email: string, password: string) => Promise<void>
   login: (email: string, password: string) => Promise<void>
@@ -32,30 +39,66 @@ export const useAuth = () => {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<User | DemoUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
 
+  // Comprobar el usuario de demostración en localStorage
+  const checkDemoUser = () => {
+    const isDemoUser = localStorage.getItem('demoUser') === 'true';
+    if (isDemoUser) {
+      return {
+        isDemoUser: true as const,
+        email: 'demo@example.com',
+        displayName: localStorage.getItem('demoUserName') || 'Usuario Demo'
+      };
+    }
+    return null;
+  };
+
   useEffect(() => {
     console.log('Setting up auth state listener...')
     
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    // Verificar primero si hay un usuario de demostración
+    const demoUser = checkDemoUser();
+    if (demoUser) {
+      setUser(demoUser);
+      setLoading(false);
+      
+      if (location.pathname === '/login') {
+        const intendedPath = sessionStorage.getItem('intendedPath') || '/';
+        navigate(intendedPath, { replace: true });
+        sessionStorage.removeItem('intendedPath');
+      }
+      return () => {}; // No hay nada que limpiar para demo user
+    }
+    
+    // Si no hay usuario de demostración, continuar con la autenticación normal de Firebase
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log('Auth state changed:', {
-        hasUser: user ? 'Yes' : 'No',
-        userEmail: user?.email || 'N/A',
-        emailVerified: user?.emailVerified || false,
+        hasUser: firebaseUser ? 'Yes' : 'No',
+        userEmail: firebaseUser?.email || 'N/A',
+        emailVerified: firebaseUser?.emailVerified || false,
       })
       
-      if (user) {
+      if (firebaseUser) {
         if (location.pathname === '/login') {
           const intendedPath = sessionStorage.getItem('intendedPath') || '/'
           console.log('Redirecting to:', intendedPath)
           navigate(intendedPath, { replace: true })
           sessionStorage.removeItem('intendedPath')
         }
-      } else if (!user && location.pathname !== '/login') {
+      } else if (!firebaseUser && location.pathname !== '/login') {
+        // Verificar nuevamente si hay un usuario de demostración (por si acaba de iniciar sesión)
+        const demoUser = checkDemoUser();
+        if (demoUser) {
+          setUser(demoUser);
+          setLoading(false);
+          return;
+        }
+        
         console.log('Storing intended path:', location.pathname)
         sessionStorage.setItem('intendedPath', location.pathname)
         
@@ -63,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         navigate('/login', { replace: true })
       }
       
-      setUser(user)
+      setUser(firebaseUser)
       setLoading(false)
     })
 
@@ -143,7 +186,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       setError(null)
-      await firebaseSignOut(auth)
+      
+      // Si es un usuario de demostración, simplemente eliminar de localStorage
+      if (user && 'isDemoUser' in user) {
+        localStorage.removeItem('demoUser');
+        localStorage.removeItem('demoUserName');
+        setUser(null);
+      } else {
+        // Logout normal de Firebase
+        await firebaseSignOut(auth)
+      }
+      
       navigate('/login', { replace: true })
     } catch (error: any) {
       console.error('Error during logout:', error)
@@ -154,7 +207,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth)
+      // Si es un usuario de demostración, simplemente eliminar de localStorage
+      if (user && 'isDemoUser' in user) {
+        localStorage.removeItem('demoUser');
+        localStorage.removeItem('demoUserName');
+        setUser(null);
+      } else {
+        // Logout normal de Firebase
+        await firebaseSignOut(auth)
+      }
     } catch (error: any) {
       console.error('Error signing out:', error)
       setError('Error al cerrar sesión.')
