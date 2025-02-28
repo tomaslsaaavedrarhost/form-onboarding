@@ -27,29 +27,6 @@ const validationSchema = Yup.object().shape({
   zipCode: Yup.string().required('Required'),
 })
 
-// Componente para el tooltip
-const InfoTooltip = ({ text }: { text: string }) => {
-  const [isVisible, setIsVisible] = useState(false);
-  
-  return (
-    <div className="relative inline-block ml-2">
-      <div
-        className="w-5 h-5 rounded-full bg-gradient-brand flex items-center justify-center cursor-help"
-        onMouseEnter={() => setIsVisible(true)}
-        onMouseLeave={() => setIsVisible(false)}
-      >
-        <span className="text-white text-sm font-medium">i</span>
-      </div>
-      {isVisible && (
-        <div className="absolute z-10 w-72 px-4 py-3 bg-white border border-gray-200 rounded-lg shadow-lg -right-2 top-7">
-          <div className="absolute -top-2 right-3 w-4 h-4 bg-white border-t border-l border-gray-200 transform rotate-45"></div>
-          <p className="text-sm text-gray-600">{text}</p>
-        </div>
-      )}
-    </div>
-  );
-};
-
 // Componente de notificación personalizado
 const Notification = ({ message, onClose }: { message: string; onClose: () => void }) => {
   useEffect(() => {
@@ -254,12 +231,12 @@ export default function ContactInfo() {
                 
                 <div className="space-y-4">
                   <div className="group">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center">
                       <label htmlFor="contactName" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
                         Nombre del Contacto
                       </label>
-                      <InfoTooltip text="Persona responsable de recibir comunicaciones importantes sobre la cuenta" />
                     </div>
+                    <p className="text-xs text-gray-500 mb-2">Persona responsable de recibir comunicaciones importantes sobre la cuenta</p>
                     <Field
                       type="text"
                       id="contactName"
@@ -275,12 +252,12 @@ export default function ContactInfo() {
                   </div>
 
                   <div className="group">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center">
                       <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
                         Teléfono de Contacto
                       </label>
-                      <InfoTooltip text="Número donde podemos contactarte para temas importantes" />
                     </div>
+                    <p className="text-xs text-gray-500 mb-2">Número donde podemos contactarte para temas importantes</p>
                     <Field
                       type="tel"
                       id="phone"
@@ -296,12 +273,12 @@ export default function ContactInfo() {
                   </div>
 
                   <div className="group">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center">
                       <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
                         Email de Contacto
                       </label>
-                      <InfoTooltip text="Email donde recibirás comunicaciones importantes" />
                     </div>
+                    <p className="text-xs text-gray-500 mb-2">Email donde recibirás comunicaciones importantes</p>
                     <Field
                       type="email"
                       id="email"
@@ -326,12 +303,12 @@ export default function ContactInfo() {
                 
                 <div className="space-y-4">
                   <div className="group">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center">
                       <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
                         Dirección
                       </label>
-                      <InfoTooltip text="Dirección legal registrada del negocio" />
                     </div>
+                    <p className="text-xs text-gray-500 mb-2">Dirección legal registrada del negocio</p>
                     <Field
                       type="text"
                       id="address"
@@ -348,7 +325,7 @@ export default function ContactInfo() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="group">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center">
                         <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
                           Ciudad
                         </label>
@@ -368,7 +345,7 @@ export default function ContactInfo() {
                     </div>
 
                     <div className="group">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center">
                         <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
                           Estado
                         </label>
@@ -388,7 +365,7 @@ export default function ContactInfo() {
                     </div>
 
                     <div className="group">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center">
                         <label htmlFor="zipCode" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
                           Código Postal
                         </label>

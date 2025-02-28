@@ -91,7 +91,7 @@ const Notification = ({ message, onClose }: { message: string; onClose: () => vo
 
 const LegalData = () => {
   const navigate = useNavigate()
-  const { formData, updateField, saveFormData, uploadFile } = useFormProgress()
+  const { formData, updateField, saveFormData, uploadFile, refreshFormData } = useFormProgress()
   const { t } = useTranslation()
   const [localFormData, setLocalFormData] = useState<FormState>({
     businessName: '',
@@ -115,6 +115,10 @@ const LegalData = () => {
   const [locationCountInput, setLocationCountInput] = useState<string>('1')
   // Add state for group warning
   const [showGroupWarning, setShowGroupWarning] = useState(false)
+  // Add state for save in progress
+  const [saveInProgress, setSaveInProgress] = useState(false)
+  // Add state for which group is being added
+  const [addingGroupIndex, setAddingGroupIndex] = useState<number | null>(null)
 
   // Agregar estado para manejar errores de ubicaciones
   const [locationErrors, setLocationErrors] = useState<{ [key: number]: string }>({});
@@ -304,44 +308,173 @@ const LegalData = () => {
 
   }, [formData?.locationCount, formData?.locations]);
 
+  // Add this function to auto-confirm all existing groups
+  const autoConfirmGroups = useCallback(() => {
+    if (!formData?.groups || formData.groups.length === 0) return;
+    
+    console.log("Auto-confirming all groups:", formData.groups);
+    
+    // Check if any groups need confirmation
+    const hasUnconfirmedGroups = formData.groups.some(group => group.nameConfirmed === false);
+    
+    if (hasUnconfirmedGroups) {
+      // Create new groups array with all groups confirmed
+      const confirmedGroups = formData.groups.map(group => ({
+        ...group,
+        nameConfirmed: true
+      }));
+      
+      console.log("Updated groups with confirmation:", confirmedGroups);
+      
+      // Update both local and global state
+      setLocalFormData(prev => ({ ...prev, groups: confirmedGroups }));
+      updateField('groups', confirmedGroups);
+      
+      // Save the changes without refreshing to prevent flickering
+      setTimeout(() => {
+        console.log("Saving auto-confirmed groups");
+        saveFormData().then(() => {
+          console.log("Auto-confirmation saved successfully");
+          // Don't refresh form data to prevent flickering
+        });
+      }, 500);
+    }
+  }, [formData?.groups, updateField, saveFormData]);
+
+  // Add an effect to run the auto-confirmation when the component mounts or when groups change
+  useEffect(() => {
+    autoConfirmGroups();
+  }, [autoConfirmGroups, formData?.groups]);
+
   // Modificar handleFieldChange para marcar cambios sin guardar
   const handleFieldChange = (
     fieldName: keyof FormState,
     value: any
   ) => {
-    setHasFormChanged(true)
+    setHasFormChanged(true);
+    
     // Comunicar al componente padre que hay cambios sin guardar
     if (window.onFormStateChange) {
-      window.onFormStateChange(true)
+      window.onFormStateChange(true);
     }
     
-    setLocalFormData(prev => ({ ...prev, [fieldName]: value }))
-
+    // Special handling for sameMenuForAll toggle
+    if (fieldName === 'sameMenuForAll' && value === false) {
+      console.log("sameMenuForAll changed to false, creating default groups");
+      
+      // Create two default groups with nameConfirmed set to true
+      const defaultGroups = [
+        { 
+          id: `group_${Date.now()}`, 
+          name: generateGroupName(0), 
+          locations: [], 
+          nameConfirmed: true  // Auto-confirm group name
+        },
+        { 
+          id: `group_${Date.now() + 1}`, 
+          name: generateGroupName(1), 
+          locations: [], 
+          nameConfirmed: true  // Auto-confirm group name
+        }
+      ];
+      
+      console.log("Created default confirmed groups:", defaultGroups);
+      
+      // Update local state with both the toggle value and the new groups
+      setLocalFormData(prev => ({ 
+        ...prev, 
+        [fieldName]: value,
+        groups: defaultGroups
+      }));
+      
+      // Update global state and save
+      updateField('groups', defaultGroups);
+      updateField(fieldName, value);
+      
+      // Save the changes without refreshing to prevent flickering
+      setTimeout(() => {
+        console.log("Saving after sameMenuForAll change");
+        saveFormData().then(() => {
+          console.log("Changes saved after sameMenuForAll toggle");
+          // Don't refresh form data to prevent flickering
+        });
+      }, 500);
+      
+      return;
+    }
+    
+    // Standard handling for other fields
+    setLocalFormData(prev => ({ ...prev, [fieldName]: value }));
+    
     if (typeof value === 'string' && ['legalBusinessName', 'taxId', 'otherRestaurantType'].includes(fieldName)) {
       if ((window as any).fieldUpdateTimeout) {
-        clearTimeout((window as any).fieldUpdateTimeout)
+        clearTimeout((window as any).fieldUpdateTimeout);
       }
       (window as any).fieldUpdateTimeout = setTimeout(() => {
-        updateField(fieldName, value)
-      }, 500)
-      return
+        updateField(fieldName, value);
+      }, 500);
+      return;
     }
-
-    updateField(fieldName, value)
-  }
+    
+    updateField(fieldName, value);
+  };
 
   // Función para guardar los cambios
   const handleSave = useCallback(async () => {
-    await saveFormData()
-    setHasFormChanged(false)
-    // Comunicar al componente padre que no hay cambios sin guardar
-    if (window.onFormStateChange) {
-      window.onFormStateChange(false)
+    console.log("Saving all form data...");
+    console.log("Current locations before saving:", formData?.locations);
+    console.log("Current groups before saving:", formData?.groups);
+    
+    // Set saving in progress
+    setSaveInProgress(true);
+    
+    try {
+      // Explicitly update locations first to ensure they're saved
+      if (formData?.locations && formData.locations.length > 0) {
+        console.log("Explicitly updating locations before final save:", formData.locations);
+        await updateField('locations', formData.locations);
+      }
+      
+      // Make sure we specifically update groups before saving all data
+      if (formData?.groups && formData.groups.length > 0) {
+        console.log("Explicitly updating groups before final save:", formData.groups);
+        await updateField('groups', formData.groups);
+      }
+      
+      // Save all form data
+      const result = await saveFormData();
+      
+      // Refresh data to verify what was saved
+      await refreshFormData();
+      console.log("Data after refresh - locations:", formData?.locations);
+      console.log("Data after refresh - groups:", formData?.groups);
+      
+      setHasFormChanged(false);
+      // Communicate to parent component that there are no unsaved changes
+      if (window.onFormStateChange) {
+        window.onFormStateChange(false);
+      }
+      
+      setShowNotification(true);
+      setNotificationMessage("Cambios guardados correctamente");
+      setTimeout(() => setShowNotification(false), 3000);
+      
+      // Reset saving state
+      setSaveInProgress(false);
+      
+      return result;
+    } catch (error) {
+      console.error("Error saving form data:", error);
+      setNotificationMessage("Error al guardar los cambios");
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
+      
+      // Reset saving state
+      setSaveInProgress(false);
+      
+      return false;
     }
-    setShowNotification(true)
-    setTimeout(() => setShowNotification(false), 3000)
-    return true // Indicar que el guardado fue exitoso
-  }, [saveFormData, setHasFormChanged, setShowNotification])
+  }, [formData, saveFormData, updateField, refreshFormData, setHasFormChanged, setShowNotification, setNotificationMessage]);
 
   // Exponer la función handleSave a través de window.saveCurrentFormData
   useEffect(() => {
@@ -392,7 +525,8 @@ const LegalData = () => {
     console.log('Modificando ubicación:', {
       index,
       newValue: value,
-      currentLocation: (formData?.locations || [])[index]
+      currentLocation: (formData?.locations || [])[index],
+      allLocations: formData?.locations
     });
 
     const newLocations = [...(formData?.locations || [])];
@@ -418,20 +552,34 @@ const LegalData = () => {
     // Marcar que hay cambios sin guardar si el valor es diferente
     if (newLocations[index].name !== value) {
       setHasFormChanged(true);
+      
+      // Notify parent component that there are unsaved changes
+      if (window.onFormStateChange) {
+        window.onFormStateChange(true);
+      }
     }
 
+    // Update the location name
     newLocations[index].name = value;
+    
     // Desconfirmar la ubicación si se cambia el nombre
     newLocations[index].nameConfirmed = false;
     
+    // Update local state
     setLocalFormData(prev => ({ ...prev, locations: newLocations }));
     
+    // Clear any existing timeout for this location
     if ((window as any).locationUpdateTimeout) {
       clearTimeout((window as any).locationUpdateTimeout);
     }
+    
+    // Debounce the update to the global state
     (window as any).locationUpdateTimeout = setTimeout(() => {
       console.log('Actualizando ubicaciones en el estado global:', newLocations);
       updateField('locations', newLocations);
+      
+      // No need to save immediately here - this is just updating the field
+      // The user will need to click "Confirm" to officially confirm the location
     }, 500);
   };
 
@@ -459,9 +607,29 @@ const LegalData = () => {
     
     console.log('Actualizando estado de confirmación:', newLocations[index]);
     
+    // Update local state
     setLocalFormData(prev => ({ ...prev, locations: newLocations }));
+    
+    // Update global state
     updateField('locations', newLocations);
+    
+    // Mark that there are unsaved changes
     setHasFormChanged(true);
+    
+    // Save changes immediately to ensure they persist
+    console.log('Guardando ubicación confirmada...');
+    setSaveInProgress(true);
+    
+    // Use setTimeout to ensure state updates are processed before saving
+    setTimeout(() => {
+      saveFormData().then(() => {
+        console.log('Ubicación confirmada guardada correctamente');
+        setSaveInProgress(false);
+      }).catch(err => {
+        console.error('Error al guardar la ubicación confirmada:', err);
+        setSaveInProgress(false);
+      });
+    }, 100);
   };
 
   // Manejar cambios en grupos
@@ -482,6 +650,10 @@ const LegalData = () => {
             group.locations = group.locations.filter((loc: string) => loc !== locationName)
           }
         })
+        
+        console.log(`Agregando ubicación '${locationName}' al grupo ${index}:`, newGroups[index].name);
+      } else {
+        console.log(`Quitando ubicación del grupo ${index}:`, newGroups[index].name);
       }
     }
 
@@ -497,8 +669,26 @@ const LegalData = () => {
       newGroups[index].nameConfirmed = value;
     }
     
-    setLocalFormData(prev => ({ ...prev, groups: newGroups }))
-    updateField('groups', newGroups)
+    // Update local state
+    setLocalFormData(prev => ({ ...prev, groups: newGroups }));
+    
+    // Update global state
+    updateField('groups', newGroups);
+    
+    // Save changes immediately to ensure they persist
+    console.log('Guardando cambios en grupos...');
+    setSaveInProgress(true);
+    
+    // Use setTimeout to ensure state updates are processed before saving
+    setTimeout(() => {
+      saveFormData().then(() => {
+        console.log('Cambios en grupos guardados correctamente', newGroups);
+        setSaveInProgress(false);
+      }).catch(err => {
+        console.error('Error al guardar los cambios en grupos:', err);
+        setSaveInProgress(false);
+      });
+    }, 100);
   }
 
   // Generar nombre de grupo automáticamente
@@ -653,34 +843,56 @@ const LegalData = () => {
   const handleAddGroup = () => {
     setHasFormChanged(true);
     
-    // Añadir logs para depuración
-    console.log("Añadiendo nuevo grupo. Grupos actuales:", formData.groups);
+    // Track which group is being added
+    const newIndex = (formData?.groups || []).length;
+    setAddingGroupIndex(newIndex);
     
-    // Generar un ID único para el grupo
+    // Add debug logs
+    console.log("Adding new group. Current groups:", formData?.groups || []);
+    
+    // Generate a unique ID for the group
     const groupId = `group_${Date.now()}`;
     
-    // Crear el nuevo grupo con todos los campos necesarios, marcándolo como NO confirmado inicialmente
+    // Create the new group with all required fields - autoconfirm the name
     const newGroup = { 
       id: groupId, 
       name: generateGroupName((formData?.groups || []).length), 
       locations: [], 
-      nameConfirmed: false  // Requerimos confirmación explícita
+      nameConfirmed: true  // Auto-confirm group name
     };
     
-    console.log("Nuevo grupo creado:", newGroup);
+    console.log("New group created:", newGroup);
     
-    // Actualizar el estado local
+    // Create the updated groups array
     const newGroups = [...(formData?.groups || []), newGroup];
+    
+    // Update local state
     setLocalFormData(prev => ({ ...prev, groups: newGroups }));
     
-    // Actualizar el estado global con los nuevos grupos
-    console.log("Actualizando estado global con los nuevos grupos:", newGroups);
+    // Update global state
+    console.log("Updating global state with new groups:", newGroups);
     updateField('groups', newGroups);
     
-    // Guardar los cambios inmediatamente para asegurar que se persistan
+    // Set saving in progress
+    setSaveInProgress(true);
+    
+    // Save changes immediately and ensure they persist
+    // Use a small timeout to ensure the updateField has completed
     setTimeout(() => {
+      console.log("Saving all form data...");
       saveFormData().then(() => {
-        console.log("Cambios guardados después de añadir el grupo");
+        console.log("Changes saved after adding group");
+        
+        // Don't refresh form data immediately after saving as it may cause flickering
+        // Instead, just reset the saving states
+        setSaveInProgress(false);
+        setAddingGroupIndex(null);
+        
+      }).catch(err => {
+        console.error("Error saving new group:", err);
+        // Reset saving state on error
+        setSaveInProgress(false);
+        setAddingGroupIndex(null);
       });
     }, 500);
   }
@@ -1007,20 +1219,13 @@ const LegalData = () => {
               {(formData?.groups || []).map((group, index) => (
                 <div 
                   key={group.id} 
-                  className="relative rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:shadow-2xl hover:scale-105"
+                  className={`relative rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:shadow-2xl ${addingGroupIndex === index ? 'animate-pulse' : ''}`}
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${gradientColors[index % gradientColors.length]} opacity-90`}></div>
                   <div className="relative p-6 z-10">
                     <div className="flex justify-between items-center mb-4">
                       <div>
                         <h4 className="text-xl font-bold text-white">{group.name}</h4>
-                        {!group.nameConfirmed && (
-                          <button 
-                            onClick={() => handleGroupChange(index, 'nameConfirmed', true)}
-                            className="text-xs text-white bg-white bg-opacity-20 px-2 py-1 rounded-lg mt-1 hover:bg-opacity-30 transition-all">
-                            Confirmar nombre
-                          </button>
-                        )}
                       </div>
                       {((formData?.groups || []).length > 2) && (
                         <button
@@ -1161,9 +1366,20 @@ const LegalData = () => {
                     ? "bg-gradient-to-r from-orange-500 to-pink-500 text-white shadow-md hover:opacity-90" 
                     : "bg-gray-100 text-gray-400 cursor-not-allowed"
                 }`}
-                disabled={!hasFormChanged}
+                disabled={!hasFormChanged || saveInProgress}
               >
-                {hasFormChanged ? "Guardar cambios" : "Cambios guardados"}
+                {saveInProgress 
+                  ? (
+                      <span className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Guardando...
+                      </span>
+                    ) 
+                  : (hasFormChanged ? "Guardar cambios" : "Cambios guardados")
+                }
               </button>
               <button
                 onClick={handleNext}
