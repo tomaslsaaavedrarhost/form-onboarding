@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Field, Form, Formik, FormikProps } from 'formik';
 import * as Yup from 'yup';
-import { ChevronDownIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from '../hooks/useTranslation';
 import { useFormProgress } from '../hooks/useFormProgress';
 import { useForm } from '../lib/FormContext';
@@ -270,63 +270,27 @@ const LocationDetails: React.FC = () => {
     );
   };
 
-  // Componente para mostrar notificación de guardado
-  const SavePrompt = ({ values }: { values: any }) => {
-    return (
-      <div className="fixed bottom-0 left-0 right-0 bg-white p-4 shadow-md border-t z-10">
-        <div className="container mx-auto flex justify-between items-center">
-          <button
-            type="button"
-            onClick={() => handleSave(values)}
-            className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
-            disabled={!hasUnsavedChanges}
-          >
-            {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
-          </button>
-          <div className="space-x-4">
-            <button
-              type="button"
-              onClick={() => navigate('/onboarding/contact-info')}
-              className="btn-secondary"
-            >
-              {t('back')}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleNext(values)}
-              className="btn-primary"
-            >
-              {t('continue')}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
-    <div className="container mx-auto px-4 py-8 mb-24">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">{t('locationDetails')}</h1>
-      <p className="text-gray-600 mb-8">
-        {t('locationDetailsDescription')}
-      </p>
-
+    <div className="space-y-8 overflow-y-auto max-h-screen pb-24">
       <Formik
         initialValues={{
           locationDetails: locationDetails.length > 0 
             ? locationDetails 
             : Array((() => {
                 // Determine the number of accordions to show
-                const confirmedLocations = (formData?.locations || []).filter((loc: Location) => loc.nameConfirmed && loc.name);
+                const confirmedLocations = (formData.locations || []).filter(loc => loc.nameConfirmed && loc.name);
                 // If we have confirmed locations, use that count, otherwise fall back to locationCount
                 return confirmedLocations.length > 0 
                   ? confirmedLocations.length 
-                  : (typeof formData?.locationCount === 'number' ? formData.locationCount : 0);
+                  : (typeof formData.locationCount === 'number' ? formData.locationCount : 0);
               })()).fill(null).map((_, index) => {
                 // Try to match with a confirmed location name if available
-                const confirmedLocation = (formData?.locations || [])
-                  .filter((loc: Location) => loc.nameConfirmed && loc.name)
-                  [index];
+                const confirmedLocations = (formData.locations || [])
+                  .filter(loc => loc.nameConfirmed && loc.name);
+                
+                const confirmedLocation = confirmedLocations[index];
+                
+                console.log(`Initializing location ${index + 1} with name:`, confirmedLocation?.name);
                   
                 return {
                   ...createEmptyLocation(),
@@ -340,98 +304,150 @@ const LocationDetails: React.FC = () => {
         innerRef={formikRef}
         onSubmit={handleNext}
       >
-        {({ values, setFieldValue }) => (
-          <Form className="space-y-8" data-formik-values={JSON.stringify(values)}>
-            {showNotification && (
-              <Notification
-                message="Los cambios han sido guardados correctamente"
-                onClose={() => setShowNotification(false)}
-              />
-            )}
+        {({ values, setFieldValue, handleSubmit }) => {
+          // Detectar cambios en el formulario y actualizar el estado
+          useEffect(() => {
+            // Solo marcar como "con cambios" si los valores son diferentes del estado original
+            const isFormDirty = JSON.stringify(values.locationDetails) !== JSON.stringify(locationDetails);
             
-            {values.locationDetails.map((location: ExtendedLocationDetail, index: number) => (
-              <div key={String(index + 1)} className="bg-white shadow rounded-lg overflow-hidden">
-                <div 
-                  className={`p-4 cursor-pointer flex justify-between items-center ${
-                    expandedLocations.includes(String(index)) ? 'bg-gray-50' : 'bg-white'
-                  }`}
-                  onClick={() => toggleAccordion(String(index))}
-                >
-                  <div className="flex items-center space-x-2">
-                    <span className="text-lg font-medium text-gray-900">
-                      Location: {location.selectedLocationName || `Location ${index + 1}`}
-                    </span>
+            if (isFormDirty !== hasUnsavedChanges) {
+              console.log('Estado de cambios sin guardar actualizado:', isFormDirty);
+              setHasUnsavedChanges(isFormDirty);
+            }
+          }, [values.locationDetails, locationDetails, hasUnsavedChanges]);
+
+          return (
+            <Form className="space-y-8" data-formik-values={JSON.stringify(values)}>
+              {showNotification && (
+                <Notification
+                  message="Los cambios han sido guardados correctamente"
+                  onClose={() => setShowNotification(false)}
+                />
+              )}
+              
+              {values.locationDetails.map((location: ExtendedLocationDetail, index: number) => (
+                <div key={String(index + 1)} className="bg-white shadow-lg rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-xl">
+                  <div 
+                    className="p-5 cursor-pointer flex justify-between items-center border-b border-gray-100"
+                    onClick={() => toggleAccordion(String(index))}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xl font-bold bg-gradient-to-r from-brand-orange to-brand-purple bg-clip-text text-transparent">
+                        Location: {location.selectedLocationName || `Location ${index + 1}`}
+                      </span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleAccordion(String(index));
+                      }}
+                      aria-label={expandedLocations.includes(String(index)) ? 'Cerrar sección' : 'Abrir sección'}
+                      className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple text-white shadow-md focus:outline-none transition-transform duration-300 transform hover:scale-105"
+                    >
+                      {expandedLocations.includes(String(index)) ? (
+                        <ChevronUpIcon className="h-5 w-5" />
+                      ) : (
+                        <ChevronDownIcon className="h-5 w-5" />
+                      )}
+                    </button>
                   </div>
-                  <ChevronDownIcon
-                    className={`w-5 h-5 text-gray-500 transform transition-transform ${
-                      expandedLocations.includes(String(index)) ? 'rotate-180' : ''
-                    }`}
-                  />
-                </div>
-                
-                <div className={`transition-all duration-200 ease-in-out ${
-                  expandedLocations.includes(String(index)) 
-                    ? 'max-h-none opacity-100' 
-                    : 'max-h-0 opacity-0 overflow-hidden'
-                }`}>
-                  <div className="p-4 space-y-6">
-                    <SectionTitle>Basic Location Information</SectionTitle>
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                      <div>
-                        <label htmlFor={`locationDetails.${index}.state`} className="block text-sm font-medium text-gray-700">
-                          State
-                        </label>
-                        <p className="mt-1 text-sm text-gray-500">
-                          Select the state where this location operates
-                        </p>
-                        <Field
-                          as="select"
-                          name={`locationDetails.${index}.state`}
-                          className="mt-2 block w-full rounded-md border-gray-300 py-3 px-4 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.state`, e.target.value)}
-                        >
-                          <option value="">Select a state...</option>
-                          {US_STATES.map(state => (
-                            <option key={state.value} value={state.value}>
-                              {state.label}
-                            </option>
-                          ))}
-                        </Field>
+                  
+                  <div className={`transition-all duration-300 ease-in-out ${
+                    expandedLocations.includes(String(index)) 
+                      ? 'max-h-[2000px] opacity-100' 
+                      : 'max-h-0 opacity-0 overflow-hidden'
+                  }`}>
+                    <div className="p-6 space-y-6">
+                      <div className="flex items-center mb-4">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-brand-orange to-brand-purple flex items-center justify-center mr-4 shadow-md">
+                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                          </svg>
+                        </div>
+                        <h3 className="text-xl font-semibold bg-gradient-to-r from-brand-orange to-brand-purple bg-clip-text text-transparent">
+                          Basic Location Information
+                        </h3>
+                      </div>
+
+                      <div className="pl-16">
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                          <div>
+                            <label htmlFor={`locationDetails.${index}.state`} className="block text-base font-medium text-gray-700 mb-1">
+                              State
+                            </label>
+                            <p className="text-sm text-gray-500 mb-2">
+                              Select the state where this location operates
+                            </p>
+                            <Field
+                              as="select"
+                              name={`locationDetails.${index}.state`}
+                              className="block w-full rounded-xl border-gray-300 py-3 px-4 shadow-sm focus:border-brand-orange focus:ring-brand-orange bg-gradient-to-br from-orange-50/30 to-purple-50/30"
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleFieldChange(setFieldValue, `locationDetails.${index}.state`, e.target.value)}
+                            >
+                              <option value="">Select a state...</option>
+                              {US_STATES.map(state => (
+                                <option key={state.value} value={state.value}>
+                                  {state.label}
+                                </option>
+                              ))}
+                            </Field>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
 
-            <div className="flex justify-between">
-              <button
-                type="button"
-                onClick={() => handleSave(values)}
-                className={hasUnsavedChanges ? 'btn-unsaved' : 'btn-saved'}
-                disabled={!hasUnsavedChanges}
-              >
-                {hasUnsavedChanges ? 'Guardar cambios' : 'Cambios guardados'}
-              </button>
-              <div className="flex space-x-4">
-                <button
-                  type="button"
-                  onClick={() => navigate('/onboarding/contact-info')}
-                  className="btn-secondary"
-                >
-                  {t('back')}
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => handleNext(values)}
-                  className="btn-primary"
-                >
-                  {t('continue')}
-                </button>
+              {/* Barra fija de botones en la parte inferior */}
+              <div className="fixed bottom-0 left-0 right-0 py-4 px-6 bg-white border-t border-gray-200 flex justify-between items-center z-10">
+                {!hasUnsavedChanges ? (
+                  <div className="flex items-center bg-green-50 border border-green-200 text-green-700 px-4 py-2 rounded-lg">
+                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path>
+                    </svg>
+                    <div>
+                      <div className="font-medium">Cambios guardados</div>
+                      <div className="text-xs text-green-600">Todo está al día</div>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/onboarding/contact-info')}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    {t('back')}
+                  </button>
+                )}
+
+                <div className="flex space-x-4">
+                  {hasUnsavedChanges ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSave(values)}
+                      className="px-6 py-3 bg-white border border-brand-orange text-brand-orange font-medium rounded-lg hover:bg-orange-50 transition-colors"
+                    >
+                      Guardar cambios
+                    </button>
+                  ) : (
+                    <div className="px-6 py-3 bg-gray-100 text-gray-500 font-medium rounded-lg">
+                      Cambios guardados
+                    </div>
+                  )}
+                  <button 
+                    type="submit"
+                    className="px-6 py-3 bg-gradient-to-r from-brand-orange to-brand-purple text-white font-medium rounded-lg hover:opacity-90 transition-colors"
+                  >
+                    {t('continue')}
+                  </button>
+                </div>
               </div>
-            </div>
-          </Form>
-        )}
+            </Form>
+          );
+        }}
       </Formik>
     </div>
   );
