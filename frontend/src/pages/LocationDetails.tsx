@@ -61,7 +61,7 @@ interface LocationDetail {
   state: string;
   zipCode: string;
   reservationSettings: ReservationSettings;
-  selectedLocationName?: string;
+  selectedLocationName: string;
   // Agregar campos para delivery y gestión de reclamos
   deliverySettings: {
     platforms: string[];
@@ -211,6 +211,9 @@ const LocationDetails: React.FC = () => {
         
         if (confirmedLocation) {
           locationDetail.selectedLocationName = confirmedLocation.name;
+        } else {
+          // Asegurar que selectedLocationName siempre tenga un valor
+          locationDetail.selectedLocationName = `Location ${i + 1}`;
         }
         
         // Si es el primer elemento, completamos con la información general
@@ -221,7 +224,7 @@ const LocationDetails: React.FC = () => {
           locationDetail.zipCode = formData.zipCode || '';
         }
         
-        constructedLocationDetails.push(locationDetail);
+        constructedLocationDetails.push(locationDetail as ExtendedLocationDetail);
       }
       
       setLocationDetails(constructedLocationDetails);
