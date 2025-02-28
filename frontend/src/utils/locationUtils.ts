@@ -1,5 +1,5 @@
 import { LocationDetail, WeeklySchedule } from '../context/FormContext'
-import type { ExtendedLocationDetail } from '../pages/LocationDetails'
+import { ExtendedLocationDetail } from '../pages/LocationDetails'
 
 export function createEmptySchedule(): WeeklySchedule {
   const schedule: WeeklySchedule = {}
@@ -34,5 +34,18 @@ export const createEmptyLocation = (): ExtendedLocationDetail => ({
       location: ''
     },
     schedule: createEmptySchedule()
+  },
+  deliverySettings: {
+    platforms: [],
+    preferredPlatform: '',
+    preferredPlatformLink: '',
+    deliveryInstructions: '',
+    deliveryRadius: '',
+    minimumOrderAmount: '',
+    claimsHandling: {
+      handledBy: '',
+      restaurantHandledCases: [],
+      additionalDetails: ''
+    }
   }
 }) 
