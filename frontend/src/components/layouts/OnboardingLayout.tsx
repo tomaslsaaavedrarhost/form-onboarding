@@ -10,6 +10,7 @@ declare global {
   interface Window {
     onFormStateChange?: (hasChanges: boolean) => void;
     saveCurrentFormData?: () => Promise<boolean>; // Función para guardar los datos del formulario actual
+    validateCurrentStep?: () => boolean; // Nueva función para validar el paso actual
   }
 }
 
@@ -72,11 +73,30 @@ export default function OnboardingLayout() {
 
   // Función para manejar la navegación entre pasos
   const handleStepClick = (href: string) => {
+    console.log(`handleStepClick: intentando navegar a ${href}`);
+    
+    // Primero verificar si hay una función de validación implementada
+    if (window.validateCurrentStep) {
+      console.log("handleStepClick: encontrada función validateCurrentStep, ejecutando validación");
+      
+      // Si la validación falla, no permitir la navegación
+      if (!window.validateCurrentStep()) {
+        console.log("handleStepClick: validación fallida, deteniendo navegación");
+        return;
+      }
+      
+      console.log("handleStepClick: validación exitosa, continuando navegación");
+    } else {
+      console.log("handleStepClick: no hay función validateCurrentStep implementada");
+    }
+
     if (hasAnyUnsavedChanges) {
+      console.log("handleStepClick: hay cambios sin guardar, mostrando prompt");
       // Si hay cambios sin guardar, mostrar el prompt y guardar la navegación pendiente
       setShowSavePrompt(true)
       setPendingNavigation(href)
     } else {
+      console.log("handleStepClick: no hay cambios sin guardar, navegando directamente");
       // Si no hay cambios sin guardar, navegar directamente
       navigate(href)
     }

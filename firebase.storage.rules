@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Regla temporal para permitir acceso a todos los usuarios autenticados
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+} 

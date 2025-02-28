@@ -327,10 +327,37 @@ export const useFormProgress = () => {
     }
 
     // Para usuarios reales, subir a Firebase Storage
-    const userId = getUserId(user);
-    const fileRef = ref(storage, `${userId}/${path}/${file.name}`);
-    await uploadBytes(fileRef, file);
-    return await getDownloadURL(fileRef);
+    try {
+      console.log('Iniciando subida de archivo:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        path: path,
+        userId: getUserId(user)
+      });
+      
+      const userId = getUserId(user);
+      const fileRef = ref(storage, `${userId}/${path}/${file.name}`);
+      
+      // Intentar subir el archivo
+      console.log('Subiendo archivo a:', fileRef.fullPath);
+      const snapshot = await uploadBytes(fileRef, file);
+      console.log('Archivo subido exitosamente:', snapshot.metadata);
+      
+      // Obtener la URL de descarga
+      const downloadURL = await getDownloadURL(fileRef);
+      console.log('URL de descarga obtenida:', downloadURL);
+      
+      return downloadURL;
+    } catch (error: any) {
+      console.error('Error al subir archivo a Firebase Storage:', error);
+      // Proporcionar información más detallada sobre el error
+      if (error.code === 'storage/unauthorized') {
+        console.error('Error de permisos: El usuario no tiene permisos para subir archivos a esta ubicación.');
+        console.error('Asegúrate de que las reglas de seguridad de Firebase Storage estén configuradas correctamente.');
+      }
+      throw error;
+    }
   };
 
   // Add saveField method

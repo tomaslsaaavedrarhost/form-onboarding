@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormProgress } from '../hooks/useFormProgress'
 import { useTranslation } from '../hooks/useTranslation'
+import { TrashIcon, MapPinIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
 
 interface Location {
   name: string
@@ -89,6 +90,81 @@ const Notification = ({ message, onClose }: { message: string; onClose: () => vo
   )
 }
 
+// Extraer los componentes de entrada en componentes memorizados para evitar re-renderizados
+const MemoizedTextInput = memo(({ 
+  label, 
+  id, 
+  value, 
+  onChange, 
+  placeholder 
+}: { 
+  label: string; 
+  id: string; 
+  value: string; 
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; 
+  placeholder: string;
+}) => {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+      <input
+        type="text"
+        id={id}
+        value={value}
+        onChange={onChange}
+        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-transparent transition duration-200 shadow-sm"
+        placeholder={placeholder}
+      />
+    </div>
+  );
+});
+MemoizedTextInput.displayName = 'MemoizedTextInput';
+
+const MemoizedSelect = memo(({ 
+  label, 
+  id, 
+  value, 
+  onChange, 
+  options 
+}: { 
+  label: string; 
+  id: string; 
+  value: string | undefined; 
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; 
+  options: { value: string; label: string }[];
+}) => {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+      <div className="relative">
+        <select
+          id={id}
+          value={value || ''}
+          onChange={onChange}
+          className="w-full appearance-none px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-transparent transition duration-200 shadow-sm pr-10"
+        >
+          <option value="">Selecciona un tipo</option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+});
+MemoizedSelect.displayName = 'MemoizedSelect';
+
 const LegalData = () => {
   const navigate = useNavigate()
   const { formData, updateField, saveFormData, uploadFile, refreshFormData } = useFormProgress()
@@ -120,8 +196,83 @@ const LegalData = () => {
   // Add state for which group is being added
   const [addingGroupIndex, setAddingGroupIndex] = useState<number | null>(null)
 
+  // Valores locales para los campos con problemas de rendimiento
+  const [legalBusinessNameInput, setLegalBusinessNameInput] = useState('');
+  const [taxIdInput, setTaxIdInput] = useState('');
+  
+  // Referencia al temporizador de auto-guardado
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Referencia para rastrear la última actualización de legalDocuments
+  const lastLegalDocsUpdateRef = useRef<string[]>([]);
+  // Flag para deshabilitar temporalmente la sincronización después de una actualización de documentos
+  const disableSyncAfterDocsUpdateRef = useRef<boolean>(false);
+
   // Agregar estado para manejar errores de ubicaciones
   const [locationErrors, setLocationErrors] = useState<{ [key: number]: string }>({});
+  
+  // Estado para errores de validación global
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
+
+  // Estados para el drag and drop
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Estado para rastrear grupos recién creados
+  const [newlyCreatedGroups, setNewlyCreatedGroups] = useState<string[]>([]);
+
+  // Funciones memorizadas para evitar recreaciones en cada renderizado
+  const handleLegalBusinessNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setLegalBusinessNameInput(e.target.value);
+  }, []);
+  
+  const handleTaxIdChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setTaxIdInput(e.target.value);
+  }, []);
+  
+  const handleRestaurantTypeChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    handleFieldChange('restaurantType', e.target.value);
+  }, []);
+  
+  // Optimizar el useEffect para el auto-guardado
+  useEffect(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    
+    // Solo marcar los cambios si realmente han cambiado
+    if (legalBusinessNameInput !== formData.legalBusinessName || taxIdInput !== formData.taxId) {
+      setHasFormChanged(true);
+    }
+    
+    // Solo configurar el temporizador si hay cambios
+    if (legalBusinessNameInput !== formData.legalBusinessName || taxIdInput !== formData.taxId) {
+      autoSaveTimerRef.current = setTimeout(() => {
+        const updates = [];
+        
+        if (legalBusinessNameInput !== formData.legalBusinessName) {
+          updates.push(updateField('legalBusinessName', legalBusinessNameInput));
+        }
+        
+        if (taxIdInput !== formData.taxId) {
+          updates.push(updateField('taxId', taxIdInput));
+        }
+        
+        // Ejecutar todos los updates en paralelo para mejorar el rendimiento
+        if (updates.length > 0) {
+          Promise.all(updates).catch(err => console.error('Error al guardar campos:', err));
+        }
+      }, 1000);
+    }
+    
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [legalBusinessNameInput, taxIdInput, formData.legalBusinessName, formData.taxId, updateField]);
+
+  // Memorizar restaurantTypes para evitar recreación en cada renderizado
+  const restaurantTypeOptions = useMemo(() => restaurantTypes, []);
 
   // Función para verificar si un nombre de ubicación está duplicado
   const isDuplicateLocationName = (name: string, currentIndex: number): boolean => {
@@ -168,6 +319,10 @@ const LegalData = () => {
         locations: formData.locations || Array(locationCount).fill(null).map(() => ({ name: '', nameConfirmed: false })),
         groups: formData.groups || []
       }));
+      
+      // Inicializar campos locales desde formData
+      setLegalBusinessNameInput(formData.legalBusinessName || '');
+      setTaxIdInput(formData.taxId || '');
     }
   }, [formData])
 
@@ -181,7 +336,33 @@ const LegalData = () => {
       locationCount: formData.locationCount
     });
     
+    // Verificar si estamos en un período de bloqueo después de una actualización de documentos
+    if (disableSyncAfterDocsUpdateRef.current) {
+      console.log('Sincronización bloqueada temporalmente después de actualizar documentos');
+      disableSyncAfterDocsUpdateRef.current = false;
+      return;
+    }
+    
     const hasChanges = Object.entries(formData).some(([key, value]) => {
+      // Caso especial para legalDocuments - comprobamos contra nuestra referencia
+      if (key === 'legalDocuments') {
+        // Si acabamos de actualizar legalDocuments, no lo tratamos como un cambio
+        const currentDocs = formData.legalDocuments || [];
+        const lastDocs = lastLegalDocsUpdateRef.current;
+        
+        // Comparar los arrays
+        const docsChanged = JSON.stringify(currentDocs) !== JSON.stringify(lastDocs);
+        
+        if (docsChanged) {
+          console.log('Detectados cambios en legalDocuments:', {
+            current: currentDocs,
+            lastKnown: lastDocs
+          });
+        }
+        
+        return docsChanged;
+      }
+      
       // Para las ubicaciones, necesitamos una comparación más profunda
       if (key === 'locations') {
         const currentLocations = formData.locations || [];
@@ -230,12 +411,24 @@ const LegalData = () => {
       return { name: '', nameConfirmed: false };
     });
 
-    setLocalFormData(prev => ({
-      ...prev,
-      ...formData,
-      locationCount,
-      locations: updatedLocations
-    }));
+    // Preservar legalDocuments si acabamos de actualizarlo
+    if (lastLegalDocsUpdateRef.current.length > 0) {
+      console.log('Preservando legalDocuments recién actualizados durante sincronización');
+      setLocalFormData(prev => ({
+        ...prev,
+        ...formData,
+        locationCount,
+        locations: updatedLocations,
+        legalDocuments: lastLegalDocsUpdateRef.current // Usar nuestra referencia más actual
+      }));
+    } else {
+      setLocalFormData(prev => ({
+        ...prev,
+        ...formData,
+        locationCount,
+        locations: updatedLocations
+      }));
+    }
 
     // Check if we need to show the group warning
     setShowGroupWarning(!formData.sameMenuForAll && (formData.groups || []).length < 2);
@@ -406,7 +599,7 @@ const LegalData = () => {
     // Standard handling for other fields
     setLocalFormData(prev => ({ ...prev, [fieldName]: value }));
     
-    if (typeof value === 'string' && ['legalBusinessName', 'taxId', 'otherRestaurantType'].includes(fieldName)) {
+    if (typeof value === 'string' && ['otherRestaurantType'].includes(fieldName)) {
       if ((window as any).fieldUpdateTimeout) {
         clearTimeout((window as any).fieldUpdateTimeout);
       }
@@ -419,6 +612,80 @@ const LegalData = () => {
     updateField(fieldName, value);
   };
 
+  // Manejar subida de archivos
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      try {
+        // Mostrar notificación de carga
+        setNotificationMessage("Subiendo archivo...");
+        setShowNotification(true);
+        
+        // Actualizar estado local primero para feedback inmediato
+        setLocalFormData(prev => ({ ...prev, irsLetter: file }));
+        
+        // Marcar que hay cambios sin guardar
+        setHasFormChanged(true);
+        
+        console.log("Iniciando carga de archivo:", file.name);
+        
+        // Subir el archivo
+        const fileUrl = await uploadFile(file, 'legalDocuments');
+        console.log("Archivo subido exitosamente, URL:", fileUrl);
+        
+        // Obtener la lista actual de documentos y agregar el nuevo
+        const currentDocs = Array.isArray(formData?.legalDocuments) ? [...formData.legalDocuments] : [];
+        console.log("Documentos existentes:", currentDocs);
+        
+        // Agregar el nuevo documento a la lista
+        const updatedDocs = [...currentDocs, fileUrl];
+        console.log("Lista actualizada de documentos:", updatedDocs);
+        
+        // Actualizar nuestra referencia para rastrear la lista más reciente
+        lastLegalDocsUpdateRef.current = updatedDocs;
+        
+        // Activar el bloqueo de sincronización para prevenir sobrescritura
+        disableSyncAfterDocsUpdateRef.current = true;
+        
+        // Actualizar el estado local inmediatamente para feedback visual
+        setLocalFormData(prev => ({ 
+          ...prev, 
+          legalDocuments: updatedDocs 
+        }));
+        
+        // Actualizar el campo legalDocuments con la URL del archivo
+        await updateField('legalDocuments', updatedDocs);
+        console.log("Campo legalDocuments actualizado");
+        
+        // Guardar los cambios inmediatamente
+        const saveResult = await saveFormData();
+        console.log("Resultado de guardado:", saveResult ? "Éxito" : "Fallido");
+        
+        // Refrescar los datos para asegurar que todo está sincronizado
+        // pero sin sobreescribir la lista de documentos local
+        await refreshFormData();
+        
+        // Resetear el indicador de cambios sin guardar ya que se guardó correctamente
+        setHasFormChanged(false);
+        
+        // Comunicar al componente padre que no hay cambios sin guardar
+        if (window.onFormStateChange) {
+          window.onFormStateChange(false);
+        }
+        
+        // Mostrar notificación de éxito
+        setNotificationMessage("Archivo subido correctamente");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+      } catch (err) {
+        console.error('Error al subir el archivo:', err);
+        setNotificationMessage("Error al subir el archivo. Intenta de nuevo.");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+      }
+    }
+  };
+
   // Función para guardar los cambios
   const handleSave = useCallback(async () => {
     console.log("Saving all form data...");
@@ -429,6 +696,15 @@ const LegalData = () => {
     setSaveInProgress(true);
     
     try {
+      // Guardar primero los valores de los campos de texto locales
+      if (legalBusinessNameInput !== formData.legalBusinessName) {
+        await updateField('legalBusinessName', legalBusinessNameInput);
+      }
+      
+      if (taxIdInput !== formData.taxId) {
+        await updateField('taxId', taxIdInput);
+      }
+      
       // Explicitly update locations first to ensure they're saved
       if (formData?.locations && formData.locations.length > 0) {
         console.log("Explicitly updating locations before final save:", formData.locations);
@@ -459,22 +735,20 @@ const LegalData = () => {
       setNotificationMessage("Cambios guardados correctamente");
       setTimeout(() => setShowNotification(false), 3000);
       
-      // Reset saving state
+      // Indicate success
       setSaveInProgress(false);
-      
-      return result;
+      return true;
     } catch (error) {
       console.error("Error saving form data:", error);
-      setNotificationMessage("Error al guardar los cambios");
       setShowNotification(true);
+      setNotificationMessage("Error al guardar los cambios. Intenta de nuevo.");
       setTimeout(() => setShowNotification(false), 3000);
       
-      // Reset saving state
+      // Indicate failure
       setSaveInProgress(false);
-      
       return false;
     }
-  }, [formData, saveFormData, updateField, refreshFormData, setHasFormChanged, setShowNotification, setNotificationMessage]);
+  }, [formData, legalBusinessNameInput, taxIdInput, saveFormData, updateField, refreshFormData]);
 
   // Exponer la función handleSave a través de window.saveCurrentFormData
   useEffect(() => {
@@ -485,40 +759,125 @@ const LegalData = () => {
     }
   }, [handleSave])
 
-  // Manejar subida de archivos
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
+  // Manejadores para el drag and drop
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      
+      // Verificar el tipo de archivo
+      const validTypes = ['.pdf', '.doc', '.docx', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      const fileType = file.type;
+      const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      
+      if (!validTypes.includes(fileType) && !validTypes.includes(fileExtension)) {
+        setNotificationMessage("Tipo de archivo no válido. Por favor, sube un PDF, DOC o DOCX.");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+        return;
+      }
+      
+      // Verificar el tamaño del archivo (10MB máximo)
+      if (file.size > 10 * 1024 * 1024) {
+        setNotificationMessage("El archivo es demasiado grande. El tamaño máximo es 10MB.");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+        return;
+      }
+      
       try {
-        setLocalFormData(prev => ({ ...prev, irsLetter: file }))
-        const fileUrl = await uploadFile(file, 'legalDocuments')
-        updateField('legalDocuments', [fileUrl])
+        // Mostrar notificación de carga
+        setNotificationMessage("Subiendo archivo...");
+        setShowNotification(true);
+        
+        // Actualizar estado local primero para feedback inmediato
+        setLocalFormData(prev => ({ ...prev, irsLetter: file }));
+        
+        // Marcar que hay cambios sin guardar
+        setHasFormChanged(true);
+        
+        console.log("Iniciando carga de archivo (drag & drop):", file.name);
+        
+        // Subir el archivo
+        const fileUrl = await uploadFile(file, 'legalDocuments');
+        console.log("Archivo subido exitosamente, URL:", fileUrl);
+        
+        // Obtener la lista actual de documentos y agregar el nuevo
+        const currentDocs = Array.isArray(formData?.legalDocuments) ? [...formData.legalDocuments] : [];
+        console.log("Documentos existentes:", currentDocs);
+        
+        // Agregar el nuevo documento a la lista
+        const updatedDocs = [...currentDocs, fileUrl];
+        console.log("Lista actualizada de documentos:", updatedDocs);
+        
+        // Actualizar nuestra referencia para rastrear la lista más reciente
+        lastLegalDocsUpdateRef.current = updatedDocs;
+        
+        // Activar el bloqueo de sincronización para prevenir sobrescritura
+        disableSyncAfterDocsUpdateRef.current = true;
+        
+        // Actualizar el estado local inmediatamente para feedback visual
+        setLocalFormData(prev => ({ 
+          ...prev, 
+          legalDocuments: updatedDocs 
+        }));
+        
+        // Actualizar el campo legalDocuments con la URL del archivo
+        await updateField('legalDocuments', updatedDocs);
+        console.log("Campo legalDocuments actualizado");
+        
+        // Guardar los cambios inmediatamente
+        const saveResult = await saveFormData();
+        console.log("Resultado de guardado:", saveResult ? "Éxito" : "Fallido");
+        
+        // Refrescar los datos para asegurar que todo está sincronizado
+        // pero sin sobreescribir la lista de documentos local
+        await refreshFormData();
+        
+        // Resetear el indicador de cambios sin guardar ya que se guardó correctamente
+        setHasFormChanged(false);
+        
+        // Comunicar al componente padre que no hay cambios sin guardar
+        if (window.onFormStateChange) {
+          window.onFormStateChange(false);
+        }
+        
+        // Mostrar notificación de éxito
+        setNotificationMessage("Archivo subido correctamente");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
       } catch (err) {
-        console.error('Error al subir el archivo:', err)
+        console.error('Error al subir el archivo:', err);
+        setNotificationMessage("Error al subir el archivo. Intenta de nuevo.");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
       }
     }
-  }
-
-  // Optimizamos los inputs para evitar re-renders innecesarios
-  const renderInput = (
-    fieldName: keyof FormState,
-    placeholder: string,
-    label: string
-  ) => (
-    <div className="form-group">
-      <label htmlFor={fieldName} className="form-label">
-        {label}
-      </label>
-      <input
-        type="text"
-        id={fieldName}
-        value={formData[fieldName] as string}
-        onChange={(e) => handleFieldChange(fieldName, e.target.value)}
-        className="input-field"
-        placeholder={placeholder}
-      />
-    </div>
-  );
+  };
 
   // Manejar cambios en las ubicaciones
   const handleLocationChange = (index: number, value: string) => {
@@ -699,64 +1058,28 @@ const LegalData = () => {
 
   // Función para manejar la navegación
   const handleNext = () => {
-    // Verificar si hay ubicaciones con nombre pero sin confirmar
-    const hasUnconfirmedLocations = (formData?.locations || []).some(
-      location => location.name.trim() !== '' && !location.nameConfirmed
-    );
-
-    if (hasUnconfirmedLocations) {
-      setLocationErrors(prev => ({
-        ...prev,
-        locations: 'Debes confirmar todas las ubicaciones antes de continuar'
-      }));
+    console.log("handleNext called, hasFormChanged:", hasFormChanged);
+    console.log("Current locations:", formData?.locations);
+    console.log("Current groups:", formData?.groups);
+    
+    // Usar la función de validación global
+    if (!window.validateCurrentStep?.()) {
       return;
     }
-
-    // Verificar si se requieren grupos confirmados (cuando no se usa el mismo menú)
-    if (!formData?.sameMenuForAll) {
-      // Verificar que haya al menos 2 grupos
-      if ((formData?.groups || []).length < 2) {
-        // Replace alert with styled notification
-        setNotificationMessage("Debes tener al menos dos grupos cuando no uses el mismo menú para todas las ubicaciones.");
-        setShowNotification(true);
-        setShowGroupWarning(true);
-        setTimeout(() => setShowNotification(false), 5000);
-        return;
-      }
-      
-      // Verificar que todos los grupos tengan ubicaciones asignadas
-      const emptyGroups = (formData?.groups || []).filter(group => group.locations.length === 0);
-      if (emptyGroups.length > 0) {
-        setNotificationMessage("Todos los grupos deben tener al menos una ubicación asignada.");
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 5000);
-        return;
-      }
-      
-      // Verificar que todos los grupos estén confirmados
-      const unconfirmedGroups = (formData?.groups || []).filter(group => !group.nameConfirmed);
-      if (unconfirmedGroups.length > 0) {
-        setNotificationMessage("Debes confirmar todos los grupos antes de continuar.");
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 5000);
-        return;
-      }
-    }
-
-    // Resetear el error si no hay ubicaciones sin confirmar
-    setLocationErrors({});
-    setShowGroupWarning(false);
-
+    
     if (hasFormChanged) {
-      setShowSavePrompt(true)
+      console.log("Form has changed, showing SavePrompt");
+      setShowSavePrompt(true);
     } else {
-      navigate('/onboarding/contact-info')
+      console.log("Form has not changed, navigating directly");
+      navigate('/onboarding/contact-info');
     }
-  }
+  };
 
   // Componente para el modal de confirmación
   const SavePrompt = () => {
-    if (!showSavePrompt) return null
+    console.log("Rendering SavePrompt, showSavePrompt:", showSavePrompt);
+    if (!showSavePrompt) return null;
 
     // Verificar si hay ubicaciones con nombre pero sin confirmar
     const hasUnconfirmedLocations = (formData?.locations || []).some(
@@ -768,53 +1091,30 @@ const LegalData = () => {
       (formData?.groups || []).some(group => !group.nameConfirmed && group.locations.length > 0);
 
     const handleContinueWithoutSaving = () => {
-      if (hasUnconfirmedLocations) {
-        setShowSavePrompt(false);
-        setLocationErrors(prev => ({
-          ...prev,
-          locations: 'Debes confirmar todas las ubicaciones antes de continuar'
-        }));
-        setTimeout(() => setLocationErrors({}), 3000);
-        return;
-      }
-      
-      if (hasUnconfirmedGroups) {
-        setShowSavePrompt(false);
-        alert("Debes confirmar todos los grupos antes de continuar.");
-        return;
-      }
-      
+      console.log("Continue without saving clicked");
+      // Ya hemos validado todo antes de mostrar el modal, así que podemos continuar directamente
+      console.log("Navigating without saving");
       setShowSavePrompt(false);
       navigate('/onboarding/contact-info');
     };
 
     const handleSaveAndContinue = async () => {
-      if (hasUnconfirmedLocations) {
-        setShowSavePrompt(false);
-        setLocationErrors(prev => ({
-          ...prev,
-          locations: 'Debes confirmar todas las ubicaciones antes de continuar'
-        }));
-        setTimeout(() => setLocationErrors({}), 3000);
-        return;
-      }
-      
-      if (hasUnconfirmedGroups) {
-        setShowSavePrompt(false);
-        alert("Debes confirmar todos los grupos antes de continuar.");
-        return;
-      }
-      
+      console.log("Save and continue clicked");
+      console.log("Saving before navigation");
       const success = await handleSave();
       if (success) {
+        console.log("Save successful, navigating");
         setShowSavePrompt(false);
         navigate('/onboarding/contact-info');
+      } else {
+        setShowSavePrompt(false);
+        setValidationMessages(prev => [...prev, "Error al guardar los datos. Por favor intenta nuevamente."]);
       }
     };
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
+        <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4 shadow-2xl">
           <h3 className="text-lg font-medium text-gray-900 mb-4">
             Cambios sin guardar
           </h3>
@@ -824,21 +1124,21 @@ const LegalData = () => {
           <div className="flex justify-end space-x-4">
             <button
               onClick={handleContinueWithoutSaving}
-              className="btn-secondary"
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
             >
               Continuar sin guardar
             </button>
             <button
               onClick={handleSaveAndContinue}
-              className="btn-primary"
+              className="px-6 py-2 bg-gradient-to-r from-orange-500 to-pink-500 text-white rounded-lg hover:opacity-90 transition-colors shadow-md"
             >
               Guardar y continuar
             </button>
           </div>
         </div>
       </div>
-    )
-  }
+    );
+  };
 
   const handleAddGroup = () => {
     setHasFormChanged(true);
@@ -854,12 +1154,18 @@ const LegalData = () => {
     const groupId = `group_${Date.now()}`;
     
     // Create the new group with all required fields - autoconfirm the name
-    const newGroup = { 
+    const newGroup = {
       id: groupId, 
       name: generateGroupName((formData?.groups || []).length), 
-      locations: [], 
+      locations: [],
       nameConfirmed: true  // Auto-confirm group name
     };
+    
+    // Agregar a la lista de grupos recién creados para mejora de UX
+    setNewlyCreatedGroups(prev => [...prev, groupId]);
+    setTimeout(() => {
+      setNewlyCreatedGroups(prev => prev.filter(id => id !== groupId));
+    }, 3000);
     
     console.log("New group created:", newGroup);
     
@@ -895,7 +1201,151 @@ const LegalData = () => {
         setAddingGroupIndex(null);
       });
     }, 500);
-  }
+  };
+
+  // Verificar si una ubicación está huérfana (no asignada a ningún grupo)
+  const isLocationOrphaned = (locationName: string): boolean => {
+    // Si se usa el mismo menú para todas, no hay huérfanos
+    if (formData?.sameMenuForAll) return false;
+    
+    // Si no hay grupos o no hay suficientes grupos, no verificamos
+    if (!formData?.groups || formData.groups.length < 2) return false;
+    
+    // Verificar si la ubicación está asignada a algún grupo
+    return !(formData.groups || []).some(group => 
+      (group.locations || []).includes(locationName)
+    );
+  };
+
+  useEffect(() => {
+    // Limpiar la función global al desmontar el componente
+    return () => {
+      window.onFormStateChange = undefined;
+      window.saveCurrentFormData = undefined;
+      window.validateCurrentStep = undefined;
+    };
+  }, []);
+
+  // Configurar la función de validación global
+  useEffect(() => {
+    // Implementar la función de validación para este componente
+    window.validateCurrentStep = () => {
+      console.log("Ejecutando validateCurrentStep en LegalData");
+      // Limpiar mensajes de validación anteriores
+      setValidationMessages([]);
+      
+      // Validación: Campo de nombre legal del negocio es obligatorio
+      if (!legalBusinessNameInput?.trim()) {
+        setValidationMessages(prev => [...prev, "El nombre legal del negocio es obligatorio."]);
+        console.log("Validación fallida: El nombre legal del negocio es obligatorio");
+        return false;
+      }
+      
+      // Validación: Campo de cantidad de ubicaciones es obligatorio
+      if (!formData?.locationCount || formData?.locationCount < 1) {
+        setValidationMessages(prev => [...prev, "La cantidad de ubicaciones es obligatoria y debe ser al menos 1."]);
+        console.log("Validación fallida: La cantidad de ubicaciones es obligatoria");
+        return false;
+      }
+      
+      // Verificar si hay ubicaciones con nombre pero sin confirmar
+      const hasUnconfirmedLocations = (formData?.locations || []).some(
+        location => location.name.trim() !== '' && !location.nameConfirmed
+      );
+
+      if (hasUnconfirmedLocations) {
+        setValidationMessages(prev => [...prev, "Debes confirmar todas las ubicaciones que hayas nombrado."]);
+        console.log("Validación fallida: Hay ubicaciones sin confirmar");
+        return false;
+      }
+      
+      // Verificar que la cantidad de ubicaciones confirmadas coincida con locationCount
+      const confirmedLocationsCount = (formData?.locations || []).filter(
+        location => location.nameConfirmed
+      ).length;
+      
+      if (confirmedLocationsCount !== formData?.locationCount) {
+        setValidationMessages(prev => [...prev, `Debes confirmar exactamente ${formData?.locationCount} ubicación(es). Actualmente tienes ${confirmedLocationsCount} confirmada(s).`]);
+        console.log(`Validación fallida: Número de ubicaciones confirmadas (${confirmedLocationsCount}) no coincide con locationCount (${formData?.locationCount})`);
+        return false;
+      }
+
+      // Verificar si se requieren grupos confirmados (cuando no se usa el mismo menú)
+      if (formData && !formData.sameMenuForAll) {
+        // Verificar que haya al menos 2 grupos
+        if ((formData?.groups || []).length < 2) {
+          setValidationMessages(prev => [...prev, "Debes tener al menos dos grupos cuando no uses el mismo menú para todas las ubicaciones."]);
+          setShowGroupWarning(true);
+          console.log("Validación fallida: Se requieren al menos dos grupos");
+          return false;
+        }
+        
+        // Verificar que todos los grupos tengan ubicaciones asignadas
+        const emptyGroups = (formData?.groups || []).filter(group => !group.locations || group.locations.length === 0);
+        if (emptyGroups.length > 0) {
+          // Mostrar mensaje más específico indicando cuáles grupos están vacíos
+          const emptyGroupNames = emptyGroups.map(group => group.name).join(', ');
+          setValidationMessages(prev => [
+            ...prev, 
+            `Los siguientes grupos no tienen ubicaciones asignadas: ${emptyGroupNames}. Cada grupo debe tener al menos una ubicación seleccionada.`
+          ]);
+          console.log(`Validación fallida: Grupos vacíos: ${emptyGroupNames}`);
+          return false;
+        }
+        
+        // Verificar que todas las ubicaciones confirmadas estén asignadas a al menos un grupo
+        const confirmedLocations = (formData?.locations || []).filter(location => location.nameConfirmed);
+        const assignedLocations = new Set();
+        
+        // Recopilar todas las ubicaciones que están asignadas a algún grupo
+        (formData?.groups || []).forEach(group => {
+          (group.locations || []).forEach(locationName => {
+            assignedLocations.add(locationName);
+          });
+        });
+        
+        // Buscar ubicaciones no asignadas
+        const unassignedLocations = confirmedLocations.filter(
+          location => !assignedLocations.has(location.name)
+        );
+        
+        if (unassignedLocations.length > 0) {
+          // Mostrar mensaje de error con las ubicaciones no asignadas
+          const unassignedLocationNames = unassignedLocations.map(location => location.name).join(', ');
+          setValidationMessages(prev => [
+            ...prev,
+            `Las siguientes ubicaciones no están asignadas a ningún grupo: ${unassignedLocationNames}. Todas las ubicaciones deben pertenecer a al menos un grupo.`
+          ]);
+          console.log(`Validación fallida: Ubicaciones no asignadas: ${unassignedLocationNames}`);
+          return false;
+        }
+      }
+       
+      // Resetear el error si no hay ubicaciones sin confirmar
+      setLocationErrors({});
+      setShowGroupWarning(false);
+      
+      // Si llegamos aquí, todas las validaciones pasaron
+      console.log("Validación exitosa en LegalData");
+      return true;
+    };
+    
+    // Limpiar la función al desmontar
+    return () => {
+      window.validateCurrentStep = undefined;
+    };
+  }, [formData, legalBusinessNameInput]);
+
+  // Configurar las funciones globales para guardar datos y notificar cambios
+  useEffect(() => {
+    // Asignar la función para guardar datos
+    window.saveCurrentFormData = saveFormData;
+    
+    // Asignar la función para notificar cambios
+    window.onFormStateChange = (hasChanges) => {
+      setHasFormChanged(hasChanges);
+    };
+  }, [saveFormData]);
 
   return (
     <div className="max-w-5xl mx-auto p-6">
@@ -910,50 +1360,36 @@ const LegalData = () => {
         <div className="grid grid-cols-1 gap-8">
           <div className="bg-white rounded-2xl shadow-xl p-8 transform transition-all duration-300 hover:shadow-2xl">
             <div className="space-y-6">
-              <div>
-                <label htmlFor="legalBusinessName" className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="flex-1">
+                <label 
+                  htmlFor="legalBusinessName" 
+                  className="block text-sm font-medium text-gray-700 mb-1 flex items-center"
+                >
                   Nombre Legal del Negocio
-                </label>
-                <input
-                  type="text"
-                  id="legalBusinessName"
-                  value={formData.legalBusinessName}
-                  onChange={(e) => handleFieldChange('legalBusinessName', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-transparent transition duration-200 shadow-sm"
-                  placeholder="Ingresa el nombre legal de tu negocio"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="restaurantType" className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo de Restaurante
+                  <span className="text-red-500 ml-1">*</span>
                 </label>
                 <div className="relative">
-                  <select
-                    id="restaurantType"
-                    value={formData.restaurantType}
-                    onChange={(e) => handleFieldChange('restaurantType', e.target.value)}
-                    className="w-full appearance-none px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-transparent transition duration-200 shadow-sm pr-10"
-                  >
-                    <option value="">Selecciona un tipo</option>
-                    {restaurantTypes.map((type) => (
-                      <option key={type.value} value={type.value}>
-                        {type.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                  </div>
+                  <input
+                    id="legalBusinessName"
+                    type="text"
+                    value={legalBusinessNameInput}
+                    onChange={handleLegalBusinessNameChange}
+                    className={`block w-full px-4 py-3 rounded-lg border ${!legalBusinessNameInput.trim() ? 'border-red-300 ring-1 ring-red-300' : 'border-gray-300'} shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-colors duration-200`}
+                    placeholder="Nombre legal registrado"
+                  />
+                  {!legalBusinessNameInput.trim() && (
+                    <p className="mt-2 text-sm text-red-600">Este campo es obligatorio</p>
+                  )}
                 </div>
-                {validationErrors.restaurantType && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {validationErrors.restaurantType}
-                  </p>
-                )}
               </div>
+
+              <MemoizedSelect
+                label="Tipo de Restaurante"
+                id="restaurantType"
+                value={formData.restaurantType}
+                onChange={handleRestaurantTypeChange}
+                options={restaurantTypeOptions}
+              />
 
               {formData.restaurantType === 'other' && (
                 <div className="animate-fadeIn">
@@ -975,25 +1411,39 @@ const LegalData = () => {
 
           <div className="bg-white rounded-2xl shadow-xl p-8 transform transition-all duration-300 hover:shadow-2xl">
             <div className="space-y-6">
-              <div>
-                <label htmlFor="taxId" className="block text-sm font-medium text-gray-700 mb-1">
-                  EIN Number
+              <div className="flex-1">
+                <label 
+                  htmlFor="taxId" 
+                  className="block text-sm font-medium text-gray-700 mb-1 flex items-center"
+                >
+                  Número de Identificación Fiscal (NIF/CIF)
                 </label>
-                <input
-                  type="text"
-                  id="taxId"
-                  value={formData.taxId}
-                  onChange={(e) => handleFieldChange('taxId', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-transparent transition duration-200 shadow-sm"
-                  placeholder="Ingresa tu EIN Number"
-                />
+                <div className="relative">
+                  <input
+                    id="taxId"
+                    type="text"
+                    value={taxIdInput}
+                    onChange={handleTaxIdChange}
+                    className="block w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-colors duration-200"
+                    placeholder="Ingresa el NIF/CIF de tu negocio"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   EIN Confirmation Letter: IRS approval letter for your company
                 </label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 transition-all duration-200 hover:border-orange-300">
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 transition-all duration-200 hover:border-orange-300"
+                  onDragEnter={handleDragEnter}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  style={{
+                    borderColor: isDragging ? '#f97316' : '',
+                    backgroundColor: isDragging ? 'rgba(249, 115, 22, 0.05)' : ''
+                  }}
+                >
                   <div className="space-y-4 text-center">
                     <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
                       <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4h-12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -1026,11 +1476,91 @@ const LegalData = () => {
                     <div className="bg-gray-50 rounded-xl p-3">
                       <ul className="text-sm text-gray-500 space-y-2">
                         {(formData?.legalDocuments || []).map((doc, index) => (
-                          <li key={index} className="flex items-center bg-white p-2 rounded-lg shadow-sm">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span className="truncate">{doc}</span>
+                          <li key={index} className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm">
+                            <div className="flex items-center overflow-hidden">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="truncate max-w-xs">{doc.split('/').pop() || doc}</span>
+                            </div>
+                            <button 
+                              onClick={async () => {
+                                try {
+                                  // Mostrar notificación
+                                  setNotificationMessage("Eliminando documento...");
+                                  setShowNotification(true);
+                                  
+                                  console.log(`Eliminando documento en índice ${index}`);
+                                  
+                                  // Obtener la lista actual de documentos
+                                  const currentDocs = Array.isArray(formData?.legalDocuments) 
+                                    ? [...formData.legalDocuments] 
+                                    : [];
+                                  
+                                  console.log("Lista actual de documentos:", currentDocs);
+                                  
+                                  // Filtrar el documento a eliminar
+                                  const updatedDocs = currentDocs.filter((_, i) => i !== index);
+                                  
+                                  console.log("Lista de documentos después de eliminar:", updatedDocs);
+                                  
+                                  // Actualizar nuestra referencia para rastrear la lista más reciente
+                                  lastLegalDocsUpdateRef.current = updatedDocs;
+                                  
+                                  // Activar el bloqueo de sincronización para prevenir sobrescritura
+                                  disableSyncAfterDocsUpdateRef.current = true;
+                                  
+                                  // Marcar que hay cambios sin guardar
+                                  setHasFormChanged(true);
+                                  
+                                  // Comunicar al componente padre que hay cambios sin guardar
+                                  if (window.onFormStateChange) {
+                                    window.onFormStateChange(true);
+                                  }
+                                  
+                                  // Actualizar el estado local inmediatamente para feedback visual
+                                  setLocalFormData(prev => ({ 
+                                    ...prev, 
+                                    legalDocuments: updatedDocs 
+                                  }));
+                                  
+                                  // Actualizar el campo legalDocuments sin el documento eliminado
+                                  await updateField('legalDocuments', updatedDocs);
+                                  console.log("Campo legalDocuments actualizado tras eliminación");
+                                  
+                                  // Guardar los cambios
+                                  const saveResult = await saveFormData();
+                                  console.log("Resultado de guardado tras eliminación:", saveResult ? "Éxito" : "Fallido");
+                                  
+                                  // Refrescar los datos, asegurando mantener la lista actualizada
+                                  await refreshFormData();
+                                  
+                                  // Resetear el indicador de cambios sin guardar ya que se guardó correctamente
+                                  setHasFormChanged(false);
+                                  
+                                  // Comunicar al componente padre que no hay cambios sin guardar
+                                  if (window.onFormStateChange) {
+                                    window.onFormStateChange(false);
+                                  }
+                                  
+                                  // Mostrar notificación de éxito
+                                  setNotificationMessage("Documento eliminado correctamente");
+                                  setShowNotification(true);
+                                  setTimeout(() => setShowNotification(false), 3000);
+                                } catch (err) {
+                                  console.error('Error al eliminar el documento:', err);
+                                  setNotificationMessage("Error al eliminar el documento");
+                                  setShowNotification(true);
+                                  setTimeout(() => setShowNotification(false), 3000);
+                                }
+                              }}
+                              className="text-red-500 hover:text-red-700 transition-colors duration-200"
+                              aria-label="Eliminar documento"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
                           </li>
                         ))}
                       </ul>
@@ -1045,8 +1575,9 @@ const LegalData = () => {
         <div className="bg-white rounded-2xl shadow-xl p-8 transform transition-all duration-300 hover:shadow-2xl mt-8">
           <div className="space-y-6">
             <div>
-              <label htmlFor="locationCount" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="locationCount" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
                 Cantidad de Ubicaciones
+                <span className="text-red-500 ml-1">*</span>
               </label>
               <div className="relative mt-1">
                 <input
@@ -1064,27 +1595,21 @@ const LegalData = () => {
                     }
                   }}
                   onBlur={() => {
-                    // Validate and correct on blur
-                    let val = parseInt(locationCountInput);
-                    if (isNaN(val) || val < 1) {
-                      val = 1;
-                    } else if (val > 50) {
-                      val = 50;
+                    // Validate on blur
+                    const val = parseInt(locationCountInput);
+                    if (isNaN(val) || val < 1 || val > 50) {
+                      // Reset to a valid value
+                      const defaultValue = formData?.locationCount || 1;
+                      setLocationCountInput(String(defaultValue));
                     }
-                    setLocationCountInput(val.toString());
-                    handleFieldChange('locationCount', val);
                   }}
-                  className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-transparent transition duration-200 shadow-sm"
+                  className={`block w-full px-4 py-3 rounded-lg border ${!locationCountInput || parseInt(locationCountInput) < 1 ? 'border-red-300 ring-1 ring-red-300' : 'border-gray-300'} shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-colors duration-200`}
+                  placeholder="Número de ubicaciones"
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-8">
-                  <span className="text-gray-400 text-sm">ubicaciones</span>
-                </div>
+                {(!locationCountInput || parseInt(locationCountInput) < 1) && (
+                  <p className="mt-2 text-sm text-red-600">Este campo es obligatorio</p>
+                )}
               </div>
-              {validationErrors.locationCount && (
-                <p className="mt-1 text-sm text-red-600">
-                  {validationErrors.locationCount}
-                </p>
-              )}
             </div>
 
             {/* Mostrar checkbox solo si hay más de una ubicación */}
@@ -1181,7 +1706,7 @@ const LegalData = () => {
                       <div className="flex justify-start">
                         <button
                           onClick={() => handleLocationConfirm(index)}
-                          className="px-3 py-1.5 text-sm text-white bg-gradient-to-r from-orange-500 to-pink-500 rounded-xl hover:opacity-90 transition-all duration-300 shadow-sm hover:shadow-md"
+                          className="px-3 py-1.5 text-white bg-gradient-to-r from-orange-500 to-pink-500 rounded-xl hover:opacity-90 transition-all duration-300 shadow-sm hover:shadow-md"
                         >
                           Confirmar
                         </button>
@@ -1202,30 +1727,55 @@ const LegalData = () => {
         {/* Sección de grupos (solo si hay más de una ubicación y no es el mismo menú para todos) */}
         {(formData?.locationCount || 1) > 1 && !formData?.sameMenuForAll && (
           <div className="animate-fadeIn">
-            <div className="mb-2">
-              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-600 mb-3">Grupos de Menús</h3>
-              <button
-                onClick={handleAddGroup}
-                className="px-3 py-2 text-white bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg hover:opacity-90 transition-all duration-300 shadow-sm flex items-center text-sm mb-4"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Agregar Grupo
-              </button>
+            <div className="mb-2 flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-600 mb-3">Grupos de Menús</h3>
+              </div>
+              {/* Contador de ubicaciones huérfanas */}
+              {formData && !formData.sameMenuForAll && formData.locations && formData.locations.filter(loc => loc.nameConfirmed && isLocationOrphaned(loc.name)).length > 0 && (
+                <div className="bg-amber-50 text-amber-800 px-4 py-2 rounded-lg border border-amber-200 flex items-center animate-pulse">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="text-sm font-medium">
+                    {formData.locations.filter(loc => loc.nameConfirmed && isLocationOrphaned(loc.name)).length} ubicaciones sin asignar
+                  </span>
+                </div>
+              )}
             </div>
+            <button
+              onClick={handleAddGroup}
+              className="px-3 py-2 text-white bg-gradient-to-r from-orange-500 to-pink-500 rounded-lg hover:opacity-90 transition-all duration-300 shadow-sm flex items-center text-sm mb-4"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              Agregar Grupo
+            </button>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {(formData?.groups || []).map((group, index) => (
                 <div 
                   key={group.id} 
-                  className={`relative rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:shadow-2xl ${addingGroupIndex === index ? 'animate-pulse' : ''}`}
+                  className={`relative rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:shadow-2xl ${
+                    addingGroupIndex === index ? 'animate-pulse' : ''
+                  } ${
+                    validationMessages.length > 0 && (!group.locations || group.locations.length === 0) && !newlyCreatedGroups.includes(group.id) ? 'ring-2 ring-amber-400 ring-offset-2' : ''
+                  }`}
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${gradientColors[index % gradientColors.length]} opacity-90`}></div>
                   <div className="relative p-6 z-10">
                     <div className="flex justify-between items-center mb-4">
                       <div>
                         <h4 className="text-xl font-bold text-white">{group.name}</h4>
+                        {(!newlyCreatedGroups.includes(group.id)) && (validationMessages.length > 0) && (!group.locations || group.locations.length === 0) && (
+                          <span className="inline-block mt-1 text-sm bg-white bg-opacity-20 text-white px-2 py-0.5 rounded-full flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Pendiente asignar ubicaciones
+                          </span>
+                        )}
                       </div>
                       {((formData?.groups || []).length > 2) && (
                         <button
@@ -1255,7 +1805,9 @@ const LegalData = () => {
                         {(formData?.locations || [])
                           .filter(location => location.nameConfirmed)
                           .map(location => (
-                            <div key={location.name} className="flex items-center space-x-2 bg-white bg-opacity-20 rounded-lg p-3 hover:bg-opacity-30 transition-all">
+                            <div key={location.name} className={`flex items-center space-x-2 bg-white ${
+                              isLocationOrphaned(location.name) ? 'bg-opacity-30 border border-amber-300' : 'bg-opacity-20'
+                            } rounded-lg p-3 hover:bg-opacity-30 transition-all`}>
                               <input
                                 type="checkbox"
                                 checked={group.locations.includes(location.name)}
@@ -1268,12 +1820,32 @@ const LegalData = () => {
                                 className="h-4 w-4 rounded border-white text-orange-500 focus:ring-orange-400 bg-white bg-opacity-30"
                               />
                               <span className="text-white text-sm font-medium">{location.name}</span>
+                              {isLocationOrphaned(location.name) && (
+                                <span className="inline-flex items-center ml-auto">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                </span>
+                              )}
                             </div>
                           ))
                         }
                         {(formData?.locations || []).filter(location => location.nameConfirmed).length === 0 && (
                           <div className="text-white text-sm opacity-80 text-center py-2">
                             No hay ubicaciones confirmadas
+                          </div>
+                        )}
+                        
+                        {/* Mensaje informativo para grupos sin ubicaciones */}
+                        {(formData?.locations || []).filter(location => location.nameConfirmed).length > 0 && 
+                         (!group.locations || group.locations.length === 0) && (
+                          <div className="bg-red-100 bg-opacity-25 border border-red-200 rounded-lg p-3 mt-2">
+                            <p className="text-white text-sm">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              Selecciona al menos una ubicación para este grupo
+                            </p>
                           </div>
                         )}
                       </div>
@@ -1383,17 +1955,39 @@ const LegalData = () => {
               </button>
               <button
                 onClick={handleNext}
-                className="px-8 py-3 text-white bg-gradient-to-r from-orange-500 to-pink-500 rounded-full hover:opacity-90 transition-all duration-300 shadow-md"
-                disabled={
-                  !formData.legalBusinessName || 
-                  !formData.taxId || 
-                  (!formData.sameMenuForAll && (formData.groups || []).length < 2)
-                }
+                className="px-8 py-3 text-white bg-gradient-to-r from-orange-500 to-pink-500 rounded-full hover:opacity-90 transition-all duration-300 shadow-md flex items-center space-x-2"
+                disabled={!legalBusinessNameInput || (!formData?.sameMenuForAll && (formData?.groups || []).length < 2)}
               >
-                Continuar
+                <span>Continuar</span>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
               </button>
             </div>
           </div>
+          
+          {/* Mensajes de validación */}
+          {validationMessages.length > 0 && (
+            <div className="max-w-7xl mx-auto px-4 py-4 bg-red-50 rounded-t-xl border-t-2 border-red-500 shadow-inner animate-fadeIn">
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-red-700">
+                    No puedes continuar por los siguientes motivos:
+                  </h3>
+                  <ul className="mt-2 text-sm text-red-600 list-disc list-inside pl-2 space-y-1">
+                    {validationMessages.map((message, index) => (
+                      <li key={index}>{message}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

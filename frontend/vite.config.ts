@@ -17,6 +17,14 @@ export default defineConfig({
   server: {
     port: 3000,
     strictPort: true,
-    open: true
+    open: true,
+    hmr: {
+      overlay: true,
+      timeout: 5000,
+    },
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
   }
 }) 
