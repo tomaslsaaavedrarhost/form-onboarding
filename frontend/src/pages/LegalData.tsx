@@ -167,7 +167,7 @@ MemoizedSelect.displayName = 'MemoizedSelect';
 
 const LegalData = () => {
   const navigate = useNavigate()
-  const { formData, updateField, saveFormData, uploadFile, refreshFormData } = useFormProgress()
+  const { formData, updateField, saveFormData, uploadFile, refreshData } = useFormProgress()
   const { t } = useTranslation()
   const [localFormData, setLocalFormData] = useState<FormState>({
     businessName: '',
@@ -621,7 +621,7 @@ const LegalData = () => {
         setNotificationMessage("Subiendo archivo...");
         setShowNotification(true);
         
-        // Actualizar estado local primero para feedback inmediato
+        // Actualizar estado local primero para feedback inmediato y mantener referencia al archivo
         setLocalFormData(prev => ({ ...prev, irsLetter: file }));
         
         // Marcar que hay cambios sin guardar
@@ -650,7 +650,8 @@ const LegalData = () => {
         // Actualizar el estado local inmediatamente para feedback visual
         setLocalFormData(prev => ({ 
           ...prev, 
-          legalDocuments: updatedDocs 
+          legalDocuments: updatedDocs,
+          irsLetter: null // Resetear después de subir con éxito
         }));
         
         // Actualizar el campo legalDocuments con la URL del archivo
@@ -663,7 +664,7 @@ const LegalData = () => {
         
         // Refrescar los datos para asegurar que todo está sincronizado
         // pero sin sobreescribir la lista de documentos local
-        await refreshFormData();
+        await refreshData();
         
         // Resetear el indicador de cambios sin guardar ya que se guardó correctamente
         setHasFormChanged(false);
@@ -696,6 +697,49 @@ const LegalData = () => {
     setSaveInProgress(true);
     
     try {
+      // Verificar si hay un archivo seleccionado que aún no se ha subido
+      const pendingFile = localFormData.irsLetter;
+      if (pendingFile && pendingFile instanceof File && 
+          (!formData?.legalDocuments || !formData.legalDocuments.some(doc => doc.includes(pendingFile.name)))) {
+        console.log("Detectado archivo pendiente de subida:", pendingFile.name);
+        
+        try {
+          setNotificationMessage("Subiendo archivo antes de guardar...");
+          setShowNotification(true);
+          
+          // Subir el archivo primero
+          const fileUrl = await uploadFile(pendingFile, 'legalDocuments');
+          console.log("Archivo subido exitosamente, URL:", fileUrl);
+          
+          // Obtener la lista actual de documentos y agregar el nuevo
+          const currentDocs = Array.isArray(formData?.legalDocuments) ? [...formData.legalDocuments] : [];
+          
+          // Agregar el nuevo documento a la lista
+          const updatedDocs = [...currentDocs, fileUrl];
+          
+          // Actualizar nuestra referencia para rastrear la lista más reciente
+          lastLegalDocsUpdateRef.current = updatedDocs;
+          
+          // Activar el bloqueo de sincronización para prevenir sobrescritura
+          disableSyncAfterDocsUpdateRef.current = true;
+          
+          // Actualizar el estado local inmediatamente para feedback visual
+          setLocalFormData(prev => ({ 
+            ...prev, 
+            legalDocuments: updatedDocs,
+            irsLetter: null // Resetear después de subir
+          }));
+          
+          // Actualizar el campo legalDocuments con la URL del archivo
+          await updateField('legalDocuments', updatedDocs);
+        } catch (err) {
+          console.error('Error al subir el archivo durante el guardado:', err);
+          setNotificationMessage("Error al subir el archivo. Continuando con el resto del guardado...");
+          setShowNotification(true);
+          // Continuamos con el resto del guardado aunque falle la subida del archivo
+        }
+      }
+      
       // Guardar primero los valores de los campos de texto locales
       if (legalBusinessNameInput !== formData.legalBusinessName) {
         await updateField('legalBusinessName', legalBusinessNameInput);
@@ -721,7 +765,7 @@ const LegalData = () => {
       const result = await saveFormData();
       
       // Refresh data to verify what was saved
-      await refreshFormData();
+      await refreshData();
       console.log("Data after refresh - locations:", formData?.locations);
       console.log("Data after refresh - groups:", formData?.groups);
       
@@ -748,7 +792,7 @@ const LegalData = () => {
       setSaveInProgress(false);
       return false;
     }
-  }, [formData, legalBusinessNameInput, taxIdInput, saveFormData, updateField, refreshFormData]);
+  }, [formData, legalBusinessNameInput, taxIdInput, saveFormData, updateField, refreshData, localFormData, uploadFile]);
 
   // Exponer la función handleSave a través de window.saveCurrentFormData
   useEffect(() => {
@@ -790,12 +834,12 @@ const LegalData = () => {
       const file = files[0];
       
       // Verificar el tipo de archivo
-      const validTypes = ['.pdf', '.doc', '.docx', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      const validTypes = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png'];
       const fileType = file.type;
       const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
       
       if (!validTypes.includes(fileType) && !validTypes.includes(fileExtension)) {
-        setNotificationMessage("Tipo de archivo no válido. Por favor, sube un PDF, DOC o DOCX.");
+        setNotificationMessage("Tipo de archivo no válido. Por favor, sube un PDF, DOC, DOCX, JPG o PNG.");
         setShowNotification(true);
         setTimeout(() => setShowNotification(false), 3000);
         return;
@@ -843,7 +887,8 @@ const LegalData = () => {
         // Actualizar el estado local inmediatamente para feedback visual
         setLocalFormData(prev => ({ 
           ...prev, 
-          legalDocuments: updatedDocs 
+          legalDocuments: updatedDocs,
+          irsLetter: null // Resetear después de subir con éxito
         }));
         
         // Actualizar el campo legalDocuments con la URL del archivo
@@ -856,7 +901,7 @@ const LegalData = () => {
         
         // Refrescar los datos para asegurar que todo está sincronizado
         // pero sin sobreescribir la lista de documentos local
-        await refreshFormData();
+        await refreshData();
         
         // Resetear el indicador de cambios sin guardar ya que se guardó correctamente
         setHasFormChanged(false);
@@ -1450,23 +1495,14 @@ const LegalData = () => {
                     </svg>
                     
                     <div className="flex flex-col items-center">
-                      <span className="text-orange-500 font-medium text-lg mb-2">Subir EIN Letter</span>
-                      <p className="text-sm text-gray-500 mb-2">o arrastra y suelta</p>
-                      <p className="text-xs text-gray-400">PDF, DOC, DOCX hasta 10MB</p>
-                      <label
-                        htmlFor="file-upload"
-                        className="cursor-pointer bg-gradient-to-r from-orange-400 to-pink-500 mt-3 inline-block px-4 py-2 rounded-lg text-white shadow-sm hover:shadow-md transition-all duration-200"
-                      >
-                        Seleccionar Archivo
-                        <input
-                          id="file-upload"
-                          name="file-upload"
-                          type="file"
-                          className="sr-only"
-                          onChange={handleFileUpload}
-                          accept=".pdf,.doc,.docx"
-                        />
-                      </label>
+                      <span className="text-orange-500 font-medium text-lg mb-2">EIN Confirmation Letter (IRS approval letter)</span>
+                      <p className="text-sm text-gray-500 mb-2">PDF, DOC, DOCX, JPG, PNG hasta 10MB</p>
+                      <input
+                        type="file"
+                        onChange={handleFileUpload}
+                        className="relative block w-full min-w-0 flex-auto rounded-xl border border-gray-200 bg-white/95 px-4 py-3 text-base text-gray-700 transition-all duration-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-gradient-to-r file:from-orange-400 file:to-pink-500 file:text-white hover:shadow-md focus:border-orange-400 focus:outline-none"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1533,7 +1569,7 @@ const LegalData = () => {
                                   console.log("Resultado de guardado tras eliminación:", saveResult ? "Éxito" : "Fallido");
                                   
                                   // Refrescar los datos, asegurando mantener la lista actualizada
-                                  await refreshFormData();
+                                  await refreshData();
                                   
                                   // Resetear el indicador de cambios sin guardar ya que se guardó correctamente
                                   setHasFormChanged(false);

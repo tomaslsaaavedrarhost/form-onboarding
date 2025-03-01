@@ -12,7 +12,7 @@ interface FormContextType {
   saveFormData: () => Promise<boolean>;
   switchForm: (formId: string) => Promise<void>;
   uploadFile: (file: File, path: string) => Promise<string>;
-  saveField: (fieldName: keyof FormData, value: any) => Promise<void>;
+  saveField: (fieldName: keyof FormData, value: any) => Promise<boolean>;
 }
 
 const FormContext = createContext<FormContextType | null>(null);

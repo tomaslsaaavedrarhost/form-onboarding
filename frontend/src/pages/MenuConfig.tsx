@@ -35,6 +35,7 @@ const createMenuGroupFromConfirmedGroup = (group: any): MenuGroup => {
     hasOtherMenus: false,
     otherMenus: [],
     otherMenuUrls: [],
+    otherMenuTypes: [],
     sharedDishes: "",
     sharedDrinks: "",
     popularAppetizers: "",
@@ -60,6 +61,7 @@ const createDefaultMenuGroup = (allLocations: string[]): MenuGroup => ({
   hasOtherMenus: false,
   otherMenus: [],
   otherMenuUrls: [],
+  otherMenuTypes: [],
   sharedDishes: "",
   sharedDrinks: "",
   popularAppetizers: "",
@@ -147,7 +149,7 @@ const validationSchema = Yup.object().shape({
 export default function MenuConfig() {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { formData, updateField, uploadFile, saveFormData, refreshFormData } = useFormProgress()
+  const { formData, updateField, uploadFile, saveFormData, refreshData } = useFormProgress()
   const [showNotification, setShowNotification] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
@@ -160,7 +162,7 @@ export default function MenuConfig() {
     const loadData = async () => {
       console.log("MenuConfig: Cargando datos iniciales...");
       try {
-        await refreshFormData();
+        await refreshData();
         console.log("Datos cargados correctamente");
       } catch (error) {
         console.error("Error al cargar datos:", error);
@@ -170,7 +172,7 @@ export default function MenuConfig() {
     };
     
     loadData();
-  }, [refreshFormData]);
+  }, [refreshData]);
 
   // Usar useMemo para calcular los valores iniciales en base a sameMenuForAll y grupos confirmados
   const initialValues = React.useMemo(() => {
@@ -770,6 +772,133 @@ export default function MenuConfig() {
                                   ¿Tiene otros tipos de menús?
                                 </label>
                               </div>
+                              
+                              {values.menuGroups[groupIndex].hasOtherMenus && (
+                                <div className="ml-8 mt-4 space-y-4">
+                                  <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                                    <h4 className="text-sm font-medium text-gray-700 mb-3">Añadir otro tipo de menú</h4>
+                                    
+                                    {/* Campo para especificar el tipo de menú */}
+                                    <div className="mb-3">
+                                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                                        Tipo de menú
+                                      </label>
+                                      <input
+                                        type="text"
+                                        placeholder="Ej: Menú de postres, Menú de temporada, etc."
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+                                        value={values.menuGroups[groupIndex].otherMenuType || ''}
+                                        onChange={(e) => {
+                                          // Guardar temporalmente el tipo de menú actual
+                                          setFieldValue(`menuGroups[${groupIndex}].otherMenuType`, e.target.value);
+                                        }}
+                                      />
+                                    </div>
+                                    
+                                    {/* Input para subir el archivo */}
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-600 mb-1">
+                                        Archivo del menú
+                                      </label>
+                                      <input
+                                        type="file"
+                                        onChange={(e) => {
+                                          const file = e.currentTarget.files?.[0];
+                                          if (!file) return;
+                                          
+                                          // Obtener el tipo de menú actual
+                                          const menuType = values.menuGroups[groupIndex].otherMenuType || 'Otro menú';
+                                          
+                                          try {
+                                            // Subir el archivo
+                                            uploadFile(file, `menuGroups/${groupIndex}/otherMenus/${Date.now()}`).then(fileUrl => {
+                                              // Obtener los arrays actuales
+                                              const currentMenus = [...values.menuGroups[groupIndex].otherMenus];
+                                              const currentUrls = [...values.menuGroups[groupIndex].otherMenuUrls];
+                                              const currentTypes = [...(values.menuGroups[groupIndex].otherMenuTypes || [])];
+                                              
+                                              // Añadir el nuevo archivo, URL y tipo
+                                              currentMenus.push(file);
+                                              currentUrls.push(fileUrl);
+                                              currentTypes.push(menuType);
+                                              
+                                              // Actualizar los arrays en el estado
+                                              handleFieldChange(groupIndex, 'otherMenus', currentMenus);
+                                              handleFieldChange(groupIndex, 'otherMenuUrls', currentUrls);
+                                              handleFieldChange(groupIndex, 'otherMenuTypes', currentTypes);
+                                              
+                                              // Limpiar el campo de tipo de menú para el siguiente
+                                              setFieldValue(`menuGroups[${groupIndex}].otherMenuType`, '');
+                                            });
+                                          } catch (error) {
+                                            console.error('Error al procesar archivo:', error);
+                                          }
+                                        }}
+                                        className="relative block w-full min-w-0 flex-auto rounded-xl border border-gray-200 bg-white/95 px-4 py-3 text-sm text-gray-700 transition-all duration-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-gradient-to-r file:from-orange-400 file:to-pink-500 file:text-white hover:shadow-md focus:border-orange-400 focus:outline-none"
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                      />
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Mostrar los menús ya subidos */}
+                                  {values.menuGroups[groupIndex].otherMenuUrls && values.menuGroups[groupIndex].otherMenuUrls.length > 0 && (
+                                    <div className="mt-4">
+                                      <h4 className="text-sm font-medium text-gray-700 mb-2">Menús subidos:</h4>
+                                      <div className="space-y-2">
+                                        {values.menuGroups[groupIndex].otherMenuUrls.map((url: string, menuIndex: number) => (
+                                          <div key={menuIndex} className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm">
+                                            <div className="flex items-center overflow-hidden">
+                                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-orange-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                              </svg>
+                                              <span className="truncate max-w-xs">
+                                                {values.menuGroups[groupIndex].otherMenuTypes && values.menuGroups[groupIndex].otherMenuTypes[menuIndex] 
+                                                  ? values.menuGroups[groupIndex].otherMenuTypes[menuIndex] 
+                                                  : 'Otro menú'
+                                                }
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center">
+                                              <a
+                                                href={url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-orange-500 hover:text-orange-700 mr-3"
+                                              >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                              </a>
+                                              <button
+                                                onClick={() => {
+                                                  // Eliminar el menú
+                                                  const newMenus = [...values.menuGroups[groupIndex].otherMenus];
+                                                  const newUrls = [...values.menuGroups[groupIndex].otherMenuUrls];
+                                                  const newTypes = [...(values.menuGroups[groupIndex].otherMenuTypes || [])];
+                                                  
+                                                  newMenus.splice(menuIndex, 1);
+                                                  newUrls.splice(menuIndex, 1);
+                                                  newTypes.splice(menuIndex, 1);
+                                                  
+                                                  handleFieldChange(groupIndex, 'otherMenus', newMenus);
+                                                  handleFieldChange(groupIndex, 'otherMenuUrls', newUrls);
+                                                  handleFieldChange(groupIndex, 'otherMenuTypes', newTypes);
+                                                }}
+                                                className="text-red-500 hover:text-red-700"
+                                              >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
