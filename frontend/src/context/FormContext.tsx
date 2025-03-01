@@ -29,6 +29,7 @@ export interface MenuGroup {
   hasOtherMenus: boolean
   otherMenus: File[]
   otherMenuUrls: string[]
+  otherMenuTypes: string[]
   sharedDishes: string
   sharedDrinks: string
   popularAppetizers: string
@@ -51,6 +52,7 @@ interface MenuConfig {
   hasDietaryMenu: boolean
   hasVeganMenu: boolean
   hasOtherMenus: boolean
+  otherMenuTypes: string[]
   sharedDishes: string
   sharedDrinks: string
   popularAppetizers: string
@@ -398,6 +400,7 @@ type FormAction =
   | { type: 'SET_TIPS_POLICY'; payload: FormState['tipsPolicy'] }
   | { type: 'SET_ADDITIONAL_NOTES'; payload: string }
   | { type: 'SET_TERMS_ACCEPTED'; payload: boolean }
+  | { type: 'SET_FORM_STATE'; payload: Partial<FormState> }
   | { type: 'RESET_FORM' }
 
 // Initial State
@@ -483,13 +486,37 @@ function formReducer(state: FormState, action: FormAction): FormState {
         }
       }
     case 'SET_AI_CONFIG':
-      return { ...state, aiConfig: action.payload }
+      console.log("Setting AI Config in context:", action.payload);
+      // Ensure personality is always an array
+      const personality = Array.isArray(action.payload.personality) 
+        ? action.payload.personality 
+        : action.payload.personality 
+          ? [action.payload.personality] 
+          : [];
+      
+      return { 
+        ...state, 
+        aiConfig: {
+          ...state.aiConfig,
+          ...action.payload,
+          personality,
+        },
+        lastSaved: new Date().toISOString()
+      }
     case 'SET_TIPS_POLICY':
       return { ...state, tipsPolicy: action.payload }
     case 'SET_ADDITIONAL_NOTES':
       return { ...state, additionalNotes: action.payload }
     case 'SET_TERMS_ACCEPTED':
       return { ...state, termsAccepted: action.payload }
+    case 'SET_FORM_STATE':
+      // Set multiple form state properties at once
+      console.log("Setting entire form state with:", action.payload);
+      return { 
+        ...state, 
+        ...action.payload,
+        lastSaved: new Date().toISOString()
+      }
     case 'RESET_FORM':
       return initialState
     default:
