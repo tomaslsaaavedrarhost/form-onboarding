@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from '../hooks/useTranslation'
 import { useFormProgress } from '../hooks/useFormProgress'
-import { Formik, Form, Field, ErrorMessage } from 'formik'
+import { Formik, Form, Field, ErrorMessage, FormikProps } from 'formik'
 import * as Yup from 'yup'
 import { FormData } from '../hooks/useFormProgress'
 
@@ -18,13 +18,13 @@ interface FormValues {
 }
 
 const validationSchema = Yup.object().shape({
-  contactName: Yup.string().required('Required'),
-  phone: Yup.string().required('Required'),
-  email: Yup.string().email('Invalid email').required('Required'),
-  address: Yup.string().required('Required'),
-  city: Yup.string().required('Required'),
-  state: Yup.string().required('Required'),
-  zipCode: Yup.string().required('Required'),
+  contactName: Yup.string().required('Campo obligatorio'),
+  phone: Yup.string().required('Campo obligatorio'),
+  email: Yup.string().email('Email inválido').required('Campo obligatorio'),
+  address: Yup.string().required('Campo obligatorio'),
+  city: Yup.string().required('Campo obligatorio'),
+  state: Yup.string().required('Campo obligatorio'),
+  zipCode: Yup.string().required('Campo obligatorio'),
 })
 
 // Componente de notificación personalizado
@@ -60,11 +60,12 @@ const Notification = ({ message, onClose }: { message: string; onClose: () => vo
   );
 };
 
-// Extender la interfaz Window para incluir saveCurrentFormData
+// Extender la interfaz Window para incluir saveCurrentFormData y validateCurrentStep
 declare global {
   interface Window {
     onFormStateChange?: (hasChanges: boolean) => void;
     saveCurrentFormData?: () => Promise<boolean>;
+    validateCurrentStep?: () => boolean;
   }
 }
 
@@ -75,6 +76,9 @@ export default function ContactInfo() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+  const formikRef = useRef<FormikProps<FormValues>>(null)
   const [localData, setLocalData] = useState<FormValues>({
     contactName: formData.contactName || '',
     phone: formData.phone || '',
@@ -128,7 +132,72 @@ export default function ContactInfo() {
     updateField(field, value)
   }
 
+  // Función de validación que se expone globalmente
+  const validateForm = useCallback(() => {
+    console.log("Ejecutando validateCurrentStep en ContactInfo");
+    // Limpiar mensajes de error anteriores
+    setValidationErrors([]);
+    
+    // Validar todos los campos requeridos
+    const requiredFields: Array<{ key: keyof FormValues, label: string }> = [
+      { key: 'contactName', label: 'Nombre del Contacto' },
+      { key: 'phone', label: 'Teléfono de Contacto' },
+      { key: 'email', label: 'Email de Contacto' },
+      { key: 'address', label: 'Dirección' },
+      { key: 'city', label: 'Ciudad' },
+      { key: 'state', label: 'Estado' },
+      { key: 'zipCode', label: 'Código Postal' }
+    ];
+    
+    // Verificar campos vacíos
+    const missingFields = requiredFields.filter(field => {
+      const value = localData[field.key];
+      return typeof value !== 'string' || value.trim() === '';
+    });
+    
+    // Si hay campos faltantes, mostrar errores y retornar false
+    if (missingFields.length > 0) {
+      const errorMessages = missingFields.map(field => 
+        `El campo "${field.label}" es obligatorio.`
+      );
+      setValidationErrors(errorMessages);
+      console.log("Validación fallida:", errorMessages);
+      
+      // También activar validación de Formik para mostrar los errores en la UI
+      if (formikRef.current) {
+        formikRef.current.validateForm();
+      }
+      
+      return false;
+    }
+    
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (localData.email && !emailRegex.test(localData.email)) {
+      setValidationErrors(['El formato del email no es válido.']);
+      console.log("Validación fallida: Email inválido");
+      return false;
+    }
+    
+    console.log("Validación exitosa en ContactInfo");
+    return true;
+  }, [localData]);
+
+  // Exponer la función de validación globalmente
+  useEffect(() => {
+    window.validateCurrentStep = validateForm;
+    
+    return () => {
+      window.validateCurrentStep = undefined;
+    };
+  }, [validateForm]);
+
   const handleNext = (values: FormValues) => {
+    // Primero validar el formulario
+    if (!validateForm()) {
+      return;
+    }
+    
     if (hasUnsavedChanges) {
       setShowSavePrompt(true)
     } else {
@@ -137,12 +206,24 @@ export default function ContactInfo() {
   }
 
   const handleSave = useCallback(async () => {
-    await saveFormData()
-    setHasUnsavedChanges(false)
-    setShowNotification(true)
-    setTimeout(() => setShowNotification(false), 3000)
-    return true; // Indicar que el guardado fue exitoso
-  }, [saveFormData, setHasUnsavedChanges, setShowNotification]);
+    if (!hasUnsavedChanges) return true;
+    
+    console.log("Guardando cambios manualmente...");
+    setIsSaving(true);
+    
+    try {
+      await saveFormData();
+      setHasUnsavedChanges(false);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
+      setIsSaving(false);
+      return true;
+    } catch (error) {
+      console.error("Error al guardar cambios:", error);
+      setIsSaving(false);
+      return false;
+    }
+  }, [saveFormData, hasUnsavedChanges]);
 
   // Exponer handleSave a través de window.saveCurrentFormData
   useEffect(() => {
@@ -214,15 +295,39 @@ export default function ContactInfo() {
           </p>
         </div>
 
+        {/* Mostrar errores de validación si existen */}
+        {validationErrors.length > 0 && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-700">
+                  Por favor corrige los siguientes errores:
+                </h3>
+                <ul className="mt-1 text-sm text-red-700 list-disc list-inside pl-2">
+                  {validationErrors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
         <Formik
           initialValues={localData}
           validationSchema={validationSchema}
           onSubmit={handleNext}
           enableReinitialize
           validateOnMount
+          innerRef={formikRef}
         >
           {({ isValid, values, setFieldValue, errors, touched }) => (
-            <Form className="space-y-8">
+            <Form className="space-y-8 pb-24">
               {/* Sección de Responsable de Comunicaciones */}
               <div className="bg-white rounded-lg shadow-sm p-6">
                 <h3 className="text-xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-brand-orange to-brand-purple mb-4">
@@ -233,7 +338,7 @@ export default function ContactInfo() {
                   <div className="group">
                     <div className="flex items-center">
                       <label htmlFor="contactName" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
-                        Nombre del Contacto
+                        Nombre del Contacto <span className="text-red-500">*</span>
                       </label>
                     </div>
                     <p className="text-xs text-gray-500 mb-2">Persona responsable de recibir comunicaciones importantes sobre la cuenta</p>
@@ -254,7 +359,7 @@ export default function ContactInfo() {
                   <div className="group">
                     <div className="flex items-center">
                       <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
-                        Teléfono de Contacto
+                        Teléfono de Contacto <span className="text-red-500">*</span>
                       </label>
                     </div>
                     <p className="text-xs text-gray-500 mb-2">Número donde podemos contactarte para temas importantes</p>
@@ -275,7 +380,7 @@ export default function ContactInfo() {
                   <div className="group">
                     <div className="flex items-center">
                       <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
-                        Email de Contacto
+                        Email de Contacto <span className="text-red-500">*</span>
                       </label>
                     </div>
                     <p className="text-xs text-gray-500 mb-2">Email donde recibirás comunicaciones importantes</p>
@@ -305,7 +410,7 @@ export default function ContactInfo() {
                   <div className="group">
                     <div className="flex items-center">
                       <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
-                        Dirección
+                        Dirección <span className="text-red-500">*</span>
                       </label>
                     </div>
                     <p className="text-xs text-gray-500 mb-2">Dirección legal registrada del negocio</p>
@@ -327,7 +432,7 @@ export default function ContactInfo() {
                     <div className="group">
                       <div className="flex items-center">
                         <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
-                          Ciudad
+                          Ciudad <span className="text-red-500">*</span>
                         </label>
                       </div>
                       <Field
@@ -347,7 +452,7 @@ export default function ContactInfo() {
                     <div className="group">
                       <div className="flex items-center">
                         <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
-                          Estado
+                          Estado <span className="text-red-500">*</span>
                         </label>
                       </div>
                       <Field
@@ -367,7 +472,7 @@ export default function ContactInfo() {
                     <div className="group">
                       <div className="flex items-center">
                         <label htmlFor="zipCode" className="block text-sm font-medium text-gray-700 mb-1 group-hover:text-brand-purple transition-colors">
-                          Código Postal
+                          Código Postal <span className="text-red-500">*</span>
                         </label>
                       </div>
                       <Field
@@ -387,50 +492,54 @@ export default function ContactInfo() {
                 </div>
               </div>
 
-              <div className="fixed bottom-0 left-0 right-0 bg-white py-3 px-6 z-10 shadow-lg">
-                <div className="flex justify-between max-w-5xl mx-auto">
+              {/* Nueva barra de botones fixed en estilo consistente con otros pasos */}
+              <div className="fixed bottom-0 left-0 right-0 bg-white py-4 shadow-lg border-t border-gray-200 z-50">
+                <div className="container mx-auto px-6 max-w-5xl flex justify-between">
                   <button
                     type="button"
                     onClick={() => navigate('/onboarding/legal-data')}
-                    className="btn-secondary inline-flex items-center"
+                    className="px-6 py-3 bg-white border border-gray-300 rounded-full text-gray-700 hover:bg-gray-50 transition flex items-center space-x-2"
                   >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                     </svg>
-                    Atrás
+                    <span>Atrás</span>
                   </button>
                   
-                  <div className="flex space-x-3">
-                    <button
-                      type="button"
-                      onClick={() => saveFormData()}
-                      className={hasUnsavedChanges ? "btn-unsaved inline-flex items-center" : "btn-saved inline-flex items-center"}
-                      disabled={!hasUnsavedChanges}
-                    >
-                      {hasUnsavedChanges ? (
-                        <>
-                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                          </svg>
-                          Guardar cambios
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          Cambios guardados
-                        </>
-                      )}
-                    </button>
+                  <div className="flex space-x-4">
+                    {hasUnsavedChanges && (
+                      <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={isSaving || !hasUnsavedChanges}
+                        className="px-6 py-3 border rounded-full flex items-center space-x-2 text-orange-600 border-orange-300 bg-orange-50 hover:bg-orange-100 transition-colors"
+                      >
+                        {isSaving ? (
+                          <>
+                            <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Guardando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                            </svg>
+                            <span>Guardar cambios</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                     
                     <button
                       type="submit"
-                      className="btn-primary inline-flex items-center"
-                      disabled={!isValid}
+                      disabled={!isValid || isSaving}
+                      className="px-8 py-3 text-white bg-gradient-to-r from-orange-400 to-pink-500 rounded-full hover:opacity-90 transition-all duration-300 shadow-md flex items-center space-x-2"
                     >
-                      Continuar
-                      <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <span>Continuar</span>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                       </svg>
                     </button>
