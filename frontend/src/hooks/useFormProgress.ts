@@ -79,9 +79,15 @@ export async function refreshFormData(): Promise<FormData | null> {
       }
     } else {
       try {
+        // Define interface for API response
+        interface ApiResponse {
+          data?: FormData;
+          [key: string]: any;
+        }
+        
         // For real users, load from API
-        const response = await axios.get('/api/form/data');
-        if (response.data?.data) {
+        const response = await axios.get<ApiResponse>('/api/form/data');
+        if (response.data && response.data.data) {
           return response.data.data;
         }
       } catch (error) {
