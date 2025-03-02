@@ -553,27 +553,21 @@ const LegalData = () => {
     
     // Special handling for sameMenuForAll toggle
     if (fieldName === 'sameMenuForAll' && value === false) {
-      console.log("sameMenuForAll changed to false, creating default groups");
+      console.log("sameMenuForAll changed to false, creating default group");
       
-      // Create two default groups with nameConfirmed set to true
+      // Create one default group with nameConfirmed set to true
       const defaultGroups = [
         { 
           id: `group_${Date.now()}`, 
           name: generateGroupName(0), 
           locations: [], 
           nameConfirmed: true  // Auto-confirm group name
-        },
-        { 
-          id: `group_${Date.now() + 1}`, 
-          name: generateGroupName(1), 
-          locations: [], 
-          nameConfirmed: true  // Auto-confirm group name
         }
       ];
       
-      console.log("Created default confirmed groups:", defaultGroups);
+      console.log("Created default confirmed group:", defaultGroups);
       
-      // Update local state with both the toggle value and the new groups
+      // Update local state with both the toggle value and the new group
       setLocalFormData(prev => ({ 
         ...prev, 
         [fieldName]: value,
@@ -1137,7 +1131,21 @@ const LegalData = () => {
 
     const handleContinueWithoutSaving = () => {
       console.log("Continue without saving clicked");
-      // Ya hemos validado todo antes de mostrar el modal, así que podemos continuar directamente
+      // Verificación adicional para asegurar que no se continúe con grupos vacíos
+      const hasEmptyGroups = !formData?.sameMenuForAll && (formData?.groups || []).some(
+        group => !group.locations || group.locations.length === 0
+      );
+      
+      if (hasEmptyGroups) {
+        console.log("No se puede continuar: hay grupos sin ubicaciones asignadas");
+        setShowSavePrompt(false);
+        setValidationMessages(prev => [
+          ...prev, 
+          "No se puede continuar: hay grupos sin ubicaciones asignadas. Cada grupo debe tener al menos una ubicación."
+        ]);
+        return;
+      }
+      
       console.log("Navigating without saving");
       setShowSavePrompt(false);
       navigate('/onboarding/contact-info');
@@ -1145,6 +1153,22 @@ const LegalData = () => {
 
     const handleSaveAndContinue = async () => {
       console.log("Save and continue clicked");
+      
+      // Verificación adicional para asegurar que no se continúe con grupos vacíos
+      const hasEmptyGroups = !formData?.sameMenuForAll && (formData?.groups || []).some(
+        group => !group.locations || group.locations.length === 0
+      );
+      
+      if (hasEmptyGroups) {
+        console.log("No se puede continuar: hay grupos sin ubicaciones asignadas");
+        setShowSavePrompt(false);
+        setValidationMessages(prev => [
+          ...prev, 
+          "No se puede continuar: hay grupos sin ubicaciones asignadas. Cada grupo debe tener al menos una ubicación."
+        ]);
+        return;
+      }
+      
       console.log("Saving before navigation");
       const success = await handleSave();
       if (success) {
@@ -1392,6 +1416,47 @@ const LegalData = () => {
     };
   }, [saveFormData]);
 
+  // Manejar eliminación de grupos
+  const handleDeleteGroup = (index: number) => {
+    // Obtener el grupo que se va a eliminar
+    const groupToDelete = formData?.groups?.[index];
+    if (!groupToDelete) return;
+    
+    console.log(`Eliminando grupo: ${groupToDelete.name}`);
+    
+    // Crear una copia de los grupos actuales
+    const newGroups = [...(formData?.groups || [])];
+    
+    // Eliminar el grupo del array
+    newGroups.splice(index, 1);
+    
+    // Marcar que hay cambios sin guardar
+    setHasFormChanged(true);
+    
+    // Actualizar el estado local
+    setLocalFormData(prev => ({ ...prev, groups: newGroups }));
+    
+    // Actualizar el estado global
+    updateField('groups', newGroups);
+    
+    // Guardar cambios inmediatamente
+    console.log('Guardando cambios después de eliminar grupo...');
+    setSaveInProgress(true);
+    
+    // Usar setTimeout para asegurar que las actualizaciones de estado se procesen antes de guardar
+    setTimeout(() => {
+      saveFormData().then(() => {
+        console.log('Cambios guardados después de eliminar grupo');
+        setSaveInProgress(false);
+        
+        // Mostrar notificación
+        setShowNotification(true);
+        setNotificationMessage(`Grupo "${groupToDelete.name}" eliminado correctamente`);
+        setTimeout(() => setShowNotification(false), 3000);
+      });
+    }, 100);
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-6">
       <div className="space-y-10">
@@ -1410,7 +1475,7 @@ const LegalData = () => {
                   htmlFor="legalBusinessName" 
                   className="block text-sm font-medium text-gray-700 mb-1 flex items-center"
                 >
-                  Nombre Legal del Negocio
+                  Nombre Legal del Negocio (Nombre legalmente constituido para la LLC)
                   <span className="text-red-500 ml-1">*</span>
                 </label>
                 <div className="relative">
@@ -1425,6 +1490,9 @@ const LegalData = () => {
                   {!legalBusinessNameInput.trim() && (
                     <p className="mt-2 text-sm text-red-600">Este campo es obligatorio</p>
                   )}
+                  <p className="mt-2 text-sm text-gray-500">
+                    Este debe ser el nombre exacto como aparece en los documentos legales de constitución de tu LLC.
+                  </p>
                 </div>
               </div>
 
@@ -1461,7 +1529,7 @@ const LegalData = () => {
                   htmlFor="taxId" 
                   className="block text-sm font-medium text-gray-700 mb-1 flex items-center"
                 >
-                  Número de Identificación Fiscal (NIF/CIF)
+                  Tax ID
                 </label>
                 <div className="relative">
                   <input
@@ -1470,139 +1538,9 @@ const LegalData = () => {
                     value={taxIdInput}
                     onChange={handleTaxIdChange}
                     className="block w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-colors duration-200"
-                    placeholder="Ingresa el NIF/CIF de tu negocio"
+                    placeholder="Ingresa tu Tax ID"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  EIN Confirmation Letter: IRS approval letter for your company
-                </label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 transition-all duration-200 hover:border-orange-300"
-                  onDragEnter={handleDragEnter}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  style={{
-                    borderColor: isDragging ? '#f97316' : '',
-                    backgroundColor: isDragging ? 'rgba(249, 115, 22, 0.05)' : ''
-                  }}
-                >
-                  <div className="space-y-4 text-center">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
-                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4h-12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    
-                    <div className="flex flex-col items-center">
-                      <span className="text-orange-500 font-medium text-lg mb-2">EIN Confirmation Letter (IRS approval letter)</span>
-                      <p className="text-sm text-gray-500 mb-2">PDF, DOC, DOCX, JPG, PNG hasta 10MB</p>
-                      <input
-                        type="file"
-                        onChange={handleFileUpload}
-                        className="relative block w-full min-w-0 flex-auto rounded-xl border border-gray-200 bg-white/95 px-4 py-3 text-base text-gray-700 transition-all duration-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-gradient-to-r file:from-orange-400 file:to-pink-500 file:text-white hover:shadow-md focus:border-orange-400 focus:outline-none"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      />
-                    </div>
-                  </div>
-                </div>
-                {(formData?.legalDocuments || []).length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">Documentos cargados:</h4>
-                    <div className="bg-gray-50 rounded-xl p-3">
-                      <ul className="text-sm text-gray-500 space-y-2">
-                        {(formData?.legalDocuments || []).map((doc, index) => (
-                          <li key={index} className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm">
-                            <div className="flex items-center overflow-hidden">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <span className="truncate max-w-xs">{doc.split('/').pop() || doc}</span>
-                            </div>
-                            <button 
-                              onClick={async () => {
-                                try {
-                                  // Mostrar notificación
-                                  setNotificationMessage("Eliminando documento...");
-                                  setShowNotification(true);
-                                  
-                                  console.log(`Eliminando documento en índice ${index}`);
-                                  
-                                  // Obtener la lista actual de documentos
-                                  const currentDocs = Array.isArray(formData?.legalDocuments) 
-                                    ? [...formData.legalDocuments] 
-                                    : [];
-                                  
-                                  console.log("Lista actual de documentos:", currentDocs);
-                                  
-                                  // Filtrar el documento a eliminar
-                                  const updatedDocs = currentDocs.filter((_, i) => i !== index);
-                                  
-                                  console.log("Lista de documentos después de eliminar:", updatedDocs);
-                                  
-                                  // Actualizar nuestra referencia para rastrear la lista más reciente
-                                  lastLegalDocsUpdateRef.current = updatedDocs;
-                                  
-                                  // Activar el bloqueo de sincronización para prevenir sobrescritura
-                                  disableSyncAfterDocsUpdateRef.current = true;
-                                  
-                                  // Marcar que hay cambios sin guardar
-                                  setHasFormChanged(true);
-                                  
-                                  // Comunicar al componente padre que hay cambios sin guardar
-                                  if (window.onFormStateChange) {
-                                    window.onFormStateChange(true);
-                                  }
-                                  
-                                  // Actualizar el estado local inmediatamente para feedback visual
-                                  setLocalFormData(prev => ({ 
-                                    ...prev, 
-                                    legalDocuments: updatedDocs 
-                                  }));
-                                  
-                                  // Actualizar el campo legalDocuments sin el documento eliminado
-                                  await updateField('legalDocuments', updatedDocs);
-                                  console.log("Campo legalDocuments actualizado tras eliminación");
-                                  
-                                  // Guardar los cambios
-                                  const saveResult = await saveFormData();
-                                  console.log("Resultado de guardado tras eliminación:", saveResult ? "Éxito" : "Fallido");
-                                  
-                                  // Refrescar los datos, asegurando mantener la lista actualizada
-                                  await refreshData();
-                                  
-                                  // Resetear el indicador de cambios sin guardar ya que se guardó correctamente
-                                  setHasFormChanged(false);
-                                  
-                                  // Comunicar al componente padre que no hay cambios sin guardar
-                                  if (window.onFormStateChange) {
-                                    window.onFormStateChange(false);
-                                  }
-                                  
-                                  // Mostrar notificación de éxito
-                                  setNotificationMessage("Documento eliminado correctamente");
-                                  setShowNotification(true);
-                                  setTimeout(() => setShowNotification(false), 3000);
-                                } catch (err) {
-                                  console.error('Error al eliminar el documento:', err);
-                                  setNotificationMessage("Error al eliminar el documento");
-                                  setShowNotification(true);
-                                  setTimeout(() => setShowNotification(false), 3000);
-                                }
-                              }}
-                              className="text-red-500 hover:text-red-700 transition-colors duration-200"
-                              aria-label="Eliminar documento"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1766,6 +1704,23 @@ const LegalData = () => {
             <div className="mb-2 flex justify-between items-center">
               <div>
                 <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-pink-600 mb-3">Grupos de Menús</h3>
+                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-lg mb-6">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-amber-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm text-amber-800 font-medium">
+                        Los grupos de menús te permiten asociar ubicaciones que comparten <span className="font-bold">exactamente el mismo menú y precios</span>.
+                      </p>
+                      <p className="text-sm text-amber-700 mt-1">
+                        Al agrupar ubicaciones, podrás subir un solo menú por grupo en lugar de hacerlo individualmente para cada ubicación, ahorrando tiempo en los próximos pasos.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
               {/* Contador de ubicaciones huérfanas */}
               {formData && !formData.sameMenuForAll && formData.locations && formData.locations.filter(loc => loc.nameConfirmed && isLocationOrphaned(loc.name)).length > 0 && (
@@ -1796,7 +1751,7 @@ const LegalData = () => {
                   className={`relative rounded-2xl overflow-hidden shadow-lg transition-all duration-300 hover:shadow-2xl ${
                     addingGroupIndex === index ? 'animate-pulse' : ''
                   } ${
-                    validationMessages.length > 0 && (!group.locations || group.locations.length === 0) && !newlyCreatedGroups.includes(group.id) ? 'ring-2 ring-amber-400 ring-offset-2' : ''
+                    validationMessages.length > 0 && (!group.locations || group.locations.length === 0) ? 'ring-2 ring-amber-400 ring-offset-2' : ''
                   }`}
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${gradientColors[index % gradientColors.length]} opacity-90`}></div>
@@ -1804,7 +1759,7 @@ const LegalData = () => {
                     <div className="flex justify-between items-center mb-4">
                       <div>
                         <h4 className="text-xl font-bold text-white">{group.name}</h4>
-                        {(!newlyCreatedGroups.includes(group.id)) && (validationMessages.length > 0) && (!group.locations || group.locations.length === 0) && (
+                        {(validationMessages.length > 0) && (!group.locations || group.locations.length === 0) && (
                           <span className="inline-block mt-1 text-sm bg-white bg-opacity-20 text-white px-2 py-0.5 rounded-full flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1813,13 +1768,9 @@ const LegalData = () => {
                           </span>
                         )}
                       </div>
-                      {((formData?.groups || []).length > 2) && (
+                      {((formData?.groups || []).length > 1) && (
                         <button
-                          onClick={() => {
-                            const newGroups = [...(formData?.groups || [])];
-                            newGroups.splice(index, 1);
-                            handleFieldChange('groups', newGroups);
-                          }}
+                          onClick={() => handleDeleteGroup(index)}
                           className="text-white bg-white bg-opacity-20 h-8 w-8 rounded-full flex items-center justify-center hover:bg-opacity-30 transition-all"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1873,8 +1824,7 @@ const LegalData = () => {
                         )}
                         
                         {/* Mensaje informativo para grupos sin ubicaciones */}
-                        {(formData?.locations || []).filter(location => location.nameConfirmed).length > 0 && 
-                         (!group.locations || group.locations.length === 0) && (
+                        {(!group.locations || group.locations.length === 0) && (
                           <div className="bg-red-100 bg-opacity-25 border border-red-200 rounded-lg p-3 mt-2">
                             <p className="text-white text-sm">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1921,7 +1871,7 @@ const LegalData = () => {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-orange-700">
-                  Debes tener al menos dos grupos cuando no uses el mismo menú para todas las ubicaciones.
+                  Se requieren al menos dos grupos. Ya se ha creado uno automáticamente, por favor crea un grupo adicional antes de continuar.
                 </p>
               </div>
             </div>
