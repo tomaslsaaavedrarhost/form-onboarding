@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useFormProgress } from '../hooks/useFormProgress'
 import { useTranslation } from '../hooks/useTranslation'
 import { TrashIcon, MapPinIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
+import { useForm } from '../context/FormContext'
 
 interface Location {
   name: string
   nameConfirmed: boolean
   groupId?: string
+  id?: string // Make id optional to match with FormContext Location
 }
 
 interface Group {
@@ -29,6 +31,11 @@ interface FormState {
   sameMenuForAll: boolean
   locations: Location[]
   groups: Group[]
+}
+
+// Add a type for validation errors
+interface ValidationErrors {
+  [key: string]: string; // This allows any string key
 }
 
 const restaurantTypes = [
@@ -167,7 +174,8 @@ MemoizedSelect.displayName = 'MemoizedSelect';
 
 const LegalData = () => {
   const navigate = useNavigate()
-  const { formData, updateField, saveFormData, uploadFile, refreshData } = useFormProgress()
+  const { formData, updateField, saveFormData, uploadFile, refreshData, saveField } = useFormProgress()
+  const { state, dispatch } = useForm() // Add FormContext
   const { t } = useTranslation()
   const [localFormData, setLocalFormData] = useState<FormState>({
     businessName: '',
@@ -184,7 +192,7 @@ const LegalData = () => {
   })
   const [showNotification, setShowNotification] = useState(false)
   const [notificationMessage, setNotificationMessage] = useState('')
-  const [validationErrors, setValidationErrors] = useState<Partial<Record<keyof FormState, string>>>({})
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({})
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [hasFormChanged, setHasFormChanged] = useState(false)
   // Add state for temporary location count input
@@ -233,6 +241,172 @@ const LegalData = () => {
     handleFieldChange('restaurantType', e.target.value);
   }, []);
   
+  // Modificar handleFieldChange para actualizar el FormContext
+  const handleFieldChange = (
+    fieldName: keyof FormState | 'locationCount' | 'legalBusinessName' | 'taxId',
+    value: any
+  ) => {
+    setHasFormChanged(true);
+    
+    // Comunicar al componente padre que hay cambios sin guardar
+    if (window.onFormStateChange) {
+      window.onFormStateChange(true);
+    }
+    
+    // Special handling for sameMenuForAll toggle
+    if (fieldName === 'sameMenuForAll' && value === false) {
+      console.log("sameMenuForAll changed to false, creating default group");
+      
+      // Create one default group with nameConfirmed set to true
+      const defaultGroups = [
+        { 
+          id: `group_${Date.now()}`, 
+          name: generateGroupName(0), 
+          locations: [], 
+          nameConfirmed: true  // Auto-confirm group name
+        }
+      ];
+      
+      console.log("Created default confirmed group:", defaultGroups);
+      
+      // Update local state with both the toggle value and the new group
+      setLocalFormData(prev => ({ 
+        ...prev, 
+        [fieldName]: value,
+        groups: defaultGroups
+      }));
+      
+      // Update FormContext
+      dispatch({ 
+        type: 'SET_LEGAL_DATA', 
+        payload: { 
+          ...state.legalData, 
+          [fieldName]: value 
+        } 
+      });
+      
+      // Also update groups in FormContext
+      dispatch({ type: 'SET_MENU_GROUPS', payload: defaultGroups as any });
+      
+      // Update global state
+      updateField(fieldName, value);
+      updateField('groups', defaultGroups);
+      
+      // Save to persistent storage immediately
+      const criticalFields = ['legalBusinessName', 'locations', 'locationCount', 'groups', 'taxId', 'restaurantType'];
+      if (criticalFields.includes(fieldName as string)) {
+        saveField(fieldName as string, value).catch((err: Error) => console.error(`Error saving ${fieldName}:`, err));
+      }
+      saveField('groups', defaultGroups).catch((err: Error) => console.error('Error saving groups:', err));
+      
+      return;
+    }
+    
+    // Update local state
+    setLocalFormData(prev => ({ 
+      ...prev, 
+      [fieldName]: value 
+    }));
+    
+    // Update FormContext
+    if (fieldName === 'legalBusinessName' || fieldName === 'restaurantType' || 
+        fieldName === 'otherRestaurantType' || fieldName === 'taxId' || 
+        fieldName === 'sameMenuForAll') {
+      dispatch({ 
+        type: 'SET_LEGAL_DATA', 
+        payload: { 
+          ...state.legalData, 
+          [fieldName]: value 
+        } 
+      });
+      
+      // Si es legalBusinessName, actualizar también el input controlado
+      if (fieldName === 'legalBusinessName') {
+        setLegalBusinessNameInput(value);
+      }
+      
+      // Si es taxId, actualizar también el input controlado
+      if (fieldName === 'taxId') {
+        setTaxIdInput(value);
+      }
+    } else if (fieldName === 'locations') {
+      // Ensure locations are properly updated in FormContext
+      dispatch({ type: 'SET_LOCATIONS', payload: value });
+    } else if (fieldName === 'locationCount') {
+      // When locationCount changes, we need to update the locations array
+      const newCount = parseInt(value as string, 10);
+      const currentLocations = [...(formData.locations || [])];
+      
+      // If increasing, add new locations
+      if (newCount > currentLocations.length) {
+        for (let i = currentLocations.length; i < newCount; i++) {
+          currentLocations.push({
+            name: `Ubicación ${i + 1}`,
+            nameConfirmed: false
+          });
+        }
+      } 
+      // If decreasing, remove locations from the end
+      else if (newCount < currentLocations.length) {
+        // Only remove unconfirmed locations or from the end if all are confirmed
+        const unconfirmedIndices = currentLocations
+          .map((loc, idx) => loc.nameConfirmed ? -1 : idx)
+          .filter(idx => idx !== -1)
+          .sort((a, b) => b - a); // Sort in descending order
+        
+        const toRemove = currentLocations.length - newCount;
+        let removed = 0;
+        
+        // First try to remove unconfirmed locations
+        for (const idx of unconfirmedIndices) {
+          if (removed < toRemove) {
+            currentLocations.splice(idx, 1);
+            removed++;
+          } else {
+            break;
+          }
+        }
+        
+        // If we still need to remove more, remove from the end
+        if (removed < toRemove) {
+          currentLocations.splice(newCount, toRemove - removed);
+        }
+      }
+      
+      // Update local state with both the count and the updated locations
+      setLocalFormData(prev => ({ 
+        ...prev, 
+        locationCount: newCount,
+        locations: currentLocations
+      }));
+      
+      // Update FormContext with the updated locations
+      dispatch({ type: 'SET_LOCATIONS', payload: currentLocations as any });
+      
+      // Update global state
+      updateField('locationCount', newCount);
+      updateField('locations', currentLocations);
+      
+      // Save to persistent storage immediately
+      const criticalFields = ['legalBusinessName', 'locations', 'locationCount', 'groups', 'taxId', 'restaurantType'];
+      if (criticalFields.includes(fieldName as string)) {
+        saveField(fieldName as string, newCount).catch((err: Error) => console.error(`Error saving ${fieldName}:`, err));
+      }
+      saveField('locations', currentLocations).catch((err: Error) => console.error('Error saving locations:', err));
+      
+      return;
+    }
+    
+    // Update global state
+    updateField(fieldName, value);
+    
+    // Save to persistent storage immediately for critical fields
+    const criticalFields = ['legalBusinessName', 'locations', 'locationCount', 'groups', 'taxId', 'restaurantType'];
+    if (criticalFields.includes(fieldName as string)) {
+      saveField(fieldName as string, value).catch((err: Error) => console.error(`Error saving ${fieldName}:`, err));
+    }
+  };
+
   // Optimizar el useEffect para el auto-guardado
   useEffect(() => {
     if (autoSaveTimerRef.current) {
@@ -247,19 +421,46 @@ const LegalData = () => {
     // Solo configurar el temporizador si hay cambios
     if (legalBusinessNameInput !== formData.legalBusinessName || taxIdInput !== formData.taxId) {
       autoSaveTimerRef.current = setTimeout(() => {
-        const updates = [];
-        
         if (legalBusinessNameInput !== formData.legalBusinessName) {
-          updates.push(updateField('legalBusinessName', legalBusinessNameInput));
+          // Actualizar el estado local
+          updateField('legalBusinessName', legalBusinessNameInput);
+          
+          // Actualizar el FormContext
+          dispatch({ 
+            type: 'SET_LEGAL_DATA', 
+            payload: { 
+              ...state.legalData, 
+              legalBusinessName: legalBusinessNameInput 
+            } 
+          });
+          
+          // Guardar en almacenamiento persistente
+          saveField('legalBusinessName', legalBusinessNameInput)
+            .then(() => {
+              console.log('legalBusinessName guardado correctamente:', legalBusinessNameInput);
+            })
+            .catch((err: Error) => console.error('Error al guardar legalBusinessName:', err));
         }
         
         if (taxIdInput !== formData.taxId) {
-          updates.push(updateField('taxId', taxIdInput));
-        }
-        
-        // Ejecutar todos los updates en paralelo para mejorar el rendimiento
-        if (updates.length > 0) {
-          Promise.all(updates).catch(err => console.error('Error al guardar campos:', err));
+          // Actualizar el estado local
+          updateField('taxId', taxIdInput);
+          
+          // Actualizar el FormContext
+          dispatch({ 
+            type: 'SET_LEGAL_DATA', 
+            payload: { 
+              ...state.legalData, 
+              taxId: taxIdInput 
+            } 
+          });
+          
+          // Guardar en almacenamiento persistente
+          saveField('taxId', taxIdInput)
+            .then(() => {
+              console.log('taxId guardado correctamente:', taxIdInput);
+            })
+            .catch((err: Error) => console.error('Error al guardar taxId:', err));
         }
       }, 1000);
     }
@@ -269,7 +470,54 @@ const LegalData = () => {
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [legalBusinessNameInput, taxIdInput, formData.legalBusinessName, formData.taxId, updateField]);
+  }, [legalBusinessNameInput, taxIdInput, formData?.legalBusinessName, formData?.taxId]);
+
+  // Agregar manejadores específicos para los inputs de nombre legal y tax ID
+  const handleLegalBusinessNameBlur = useCallback(() => {
+    if (legalBusinessNameInput !== formData?.legalBusinessName) {
+      // Guardar inmediatamente al perder el foco
+      saveField('legalBusinessName', legalBusinessNameInput)
+        .then(() => {
+          console.log('legalBusinessName guardado al perder el foco:', legalBusinessNameInput);
+          
+          // Actualizar el estado global
+          updateField('legalBusinessName', legalBusinessNameInput);
+          
+          // Actualizar el FormContext
+          dispatch({ 
+            type: 'SET_LEGAL_DATA', 
+            payload: { 
+              ...state.legalData, 
+              legalBusinessName: legalBusinessNameInput 
+            } 
+          });
+        })
+        .catch((err: Error) => console.error('Error al guardar legalBusinessName:', err));
+    }
+  }, [legalBusinessNameInput, formData?.legalBusinessName, saveField, updateField, dispatch, state.legalData]);
+  
+  const handleTaxIdBlur = useCallback(() => {
+    if (taxIdInput !== formData?.taxId) {
+      // Guardar inmediatamente al perder el foco
+      saveField('taxId', taxIdInput)
+        .then(() => {
+          console.log('taxId guardado al perder el foco:', taxIdInput);
+          
+          // Actualizar el estado global
+          updateField('taxId', taxIdInput);
+          
+          // Actualizar el FormContext
+          dispatch({ 
+            type: 'SET_LEGAL_DATA', 
+            payload: { 
+              ...state.legalData, 
+              taxId: taxIdInput 
+            } 
+          });
+        })
+        .catch((err: Error) => console.error('Error al guardar taxId:', err));
+    }
+  }, [taxIdInput, formData?.taxId, saveField, updateField, dispatch, state.legalData]);
 
   // Memorizar restaurantTypes para evitar recreación en cada renderizado
   const restaurantTypeOptions = useMemo(() => restaurantTypes, []);
@@ -539,73 +787,6 @@ const LegalData = () => {
     autoConfirmGroups();
   }, [autoConfirmGroups, formData?.groups]);
 
-  // Modificar handleFieldChange para marcar cambios sin guardar
-  const handleFieldChange = (
-    fieldName: keyof FormState,
-    value: any
-  ) => {
-    setHasFormChanged(true);
-    
-    // Comunicar al componente padre que hay cambios sin guardar
-    if (window.onFormStateChange) {
-      window.onFormStateChange(true);
-    }
-    
-    // Special handling for sameMenuForAll toggle
-    if (fieldName === 'sameMenuForAll' && value === false) {
-      console.log("sameMenuForAll changed to false, creating default group");
-      
-      // Create one default group with nameConfirmed set to true
-      const defaultGroups = [
-        { 
-          id: `group_${Date.now()}`, 
-          name: generateGroupName(0), 
-          locations: [], 
-          nameConfirmed: true  // Auto-confirm group name
-        }
-      ];
-      
-      console.log("Created default confirmed group:", defaultGroups);
-      
-      // Update local state with both the toggle value and the new group
-      setLocalFormData(prev => ({ 
-        ...prev, 
-        [fieldName]: value,
-        groups: defaultGroups
-      }));
-      
-      // Update global state and save
-      updateField('groups', defaultGroups);
-      updateField(fieldName, value);
-      
-      // Save the changes without refreshing to prevent flickering
-      setTimeout(() => {
-        console.log("Saving after sameMenuForAll change");
-        saveFormData().then(() => {
-          console.log("Changes saved after sameMenuForAll toggle");
-          // Don't refresh form data to prevent flickering
-        });
-      }, 500);
-      
-      return;
-    }
-    
-    // Standard handling for other fields
-    setLocalFormData(prev => ({ ...prev, [fieldName]: value }));
-    
-    if (typeof value === 'string' && ['otherRestaurantType'].includes(fieldName)) {
-      if ((window as any).fieldUpdateTimeout) {
-        clearTimeout((window as any).fieldUpdateTimeout);
-      }
-      (window as any).fieldUpdateTimeout = setTimeout(() => {
-        updateField(fieldName, value);
-      }, 500);
-      return;
-    }
-    
-    updateField(fieldName, value);
-  };
-
   // Manejar subida de archivos
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -617,6 +798,15 @@ const LegalData = () => {
         
         // Actualizar estado local primero para feedback inmediato y mantener referencia al archivo
         setLocalFormData(prev => ({ ...prev, irsLetter: file }));
+        
+        // Update FormContext with the file
+        dispatch({ 
+          type: 'SET_LEGAL_DATA', 
+          payload: { 
+            ...state.legalData, 
+            irsLetter: file 
+          } 
+        });
         
         // Marcar que hay cambios sin guardar
         setHasFormChanged(true);
@@ -647,6 +837,15 @@ const LegalData = () => {
           legalDocuments: updatedDocs,
           irsLetter: null // Resetear después de subir con éxito
         }));
+        
+        // Update FormContext with the updated documents and reset irsLetter
+        dispatch({ 
+          type: 'SET_LEGAL_DATA', 
+          payload: { 
+            ...state.legalData, 
+            irsLetter: null 
+          } 
+        });
         
         // Actualizar el campo legalDocuments con la URL del archivo
         await updateField('legalDocuments', updatedDocs);
@@ -698,95 +897,133 @@ const LegalData = () => {
         console.log("Detectado archivo pendiente de subida:", pendingFile.name);
         
         try {
-          setNotificationMessage("Subiendo archivo antes de guardar...");
+          // Mostrar notificación de carga
+          setNotificationMessage("Subiendo archivo pendiente...");
           setShowNotification(true);
           
-          // Subir el archivo primero
+          // Subir el archivo
           const fileUrl = await uploadFile(pendingFile, 'legalDocuments');
           console.log("Archivo subido exitosamente, URL:", fileUrl);
           
           // Obtener la lista actual de documentos y agregar el nuevo
           const currentDocs = Array.isArray(formData?.legalDocuments) ? [...formData.legalDocuments] : [];
-          
-          // Agregar el nuevo documento a la lista
           const updatedDocs = [...currentDocs, fileUrl];
-          
-          // Actualizar nuestra referencia para rastrear la lista más reciente
-          lastLegalDocsUpdateRef.current = updatedDocs;
-          
-          // Activar el bloqueo de sincronización para prevenir sobrescritura
-          disableSyncAfterDocsUpdateRef.current = true;
-          
-          // Actualizar el estado local inmediatamente para feedback visual
-          setLocalFormData(prev => ({ 
-            ...prev, 
-            legalDocuments: updatedDocs,
-            irsLetter: null // Resetear después de subir
-          }));
           
           // Actualizar el campo legalDocuments con la URL del archivo
           await updateField('legalDocuments', updatedDocs);
+          
+          // Actualizar el estado local
+          setLocalFormData(prev => ({ 
+            ...prev, 
+            legalDocuments: updatedDocs,
+            irsLetter: null // Resetear después de subir con éxito
+          }));
+          
+          // Update FormContext
+          dispatch({ 
+            type: 'SET_LEGAL_DATA', 
+            payload: { 
+              ...state.legalData, 
+              irsLetter: null 
+            } 
+          });
         } catch (err) {
-          console.error('Error al subir el archivo durante el guardado:', err);
-          setNotificationMessage("Error al subir el archivo. Continuando con el resto del guardado...");
+          console.error('Error al subir el archivo pendiente:', err);
+          setNotificationMessage("Error al subir el archivo. Intenta de nuevo.");
           setShowNotification(true);
-          // Continuamos con el resto del guardado aunque falle la subida del archivo
+          setTimeout(() => setShowNotification(false), 3000);
+          setSaveInProgress(false);
+          return false;
         }
       }
       
-      // Guardar primero los valores de los campos de texto locales
-      if (legalBusinessNameInput !== formData.legalBusinessName) {
-        await updateField('legalBusinessName', legalBusinessNameInput);
+      // Double check that FormContext is up to date with all the latest values
+      try {
+        // Update legal data in FormContext with checks for nulls/undefined
+        dispatch({ 
+          type: 'SET_LEGAL_DATA', 
+          payload: { 
+            ...state.legalData,
+            legalBusinessName: localFormData.legalBusinessName || formData?.legalBusinessName || '',
+            restaurantType: localFormData.restaurantType || formData?.restaurantType || '',
+            otherRestaurantType: localFormData.otherRestaurantType || formData?.otherRestaurantType || '',
+            taxId: localFormData.taxId || formData?.taxId || '',
+            sameMenuForAll: localFormData.sameMenuForAll !== undefined ? localFormData.sameMenuForAll : formData?.sameMenuForAll || true
+          } 
+        });
+        
+        // Update locations in FormContext
+        if (formData?.locations) {
+          console.log("Updating locations in FormContext before saving:", formData.locations);
+          dispatch({ type: 'SET_LOCATIONS', payload: formData.locations as any });
+        }
+        
+        // Update groups in FormContext
+        if (formData?.groups) {
+          console.log("Updating groups in FormContext before saving:", formData.groups);
+          dispatch({ type: 'SET_MENU_GROUPS', payload: formData.groups as any });
+        }
+      } catch (error) {
+        console.error("Error updating FormContext before saving:", error);
+        setNotificationMessage("Error al preparar los datos. Intenta de nuevo.");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+        setSaveInProgress(false);
+        return false;
       }
       
-      if (taxIdInput !== formData.taxId) {
-        await updateField('taxId', taxIdInput);
-      }
-      
-      // Explicitly update locations first to ensure they're saved
-      if (formData?.locations && formData.locations.length > 0) {
-        console.log("Explicitly updating locations before final save:", formData.locations);
-        await updateField('locations', formData.locations);
-      }
-      
-      // Make sure we specifically update groups before saving all data
-      if (formData?.groups && formData.groups.length > 0) {
-        console.log("Explicitly updating groups before final save:", formData.groups);
-        await updateField('groups', formData.groups);
-      }
+      // Give a short delay to ensure context updates have been processed
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Save all form data
-      const result = await saveFormData();
-      
-      // Refresh data to verify what was saved
-      await refreshData();
-      console.log("Data after refresh - locations:", formData?.locations);
-      console.log("Data after refresh - groups:", formData?.groups);
-      
-      setHasFormChanged(false);
-      // Communicate to parent component that there are no unsaved changes
-      if (window.onFormStateChange) {
-        window.onFormStateChange(false);
+      try {
+        console.log("Calling saveFormData...");
+        const result = await saveFormData();
+        
+        if (result) {
+          console.log("Datos guardados correctamente");
+          setNotificationMessage("Datos guardados correctamente");
+          setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 3000);
+          
+          // Resetear indicador de cambios sin guardar
+          setHasFormChanged(false);
+          
+          // Comunicar al componente padre que no hay cambios sin guardar
+          if (window.onFormStateChange) {
+            window.onFormStateChange(false);
+          }
+          
+          // Refrescar datos para asegurar sincronización
+          await refreshData();
+          
+          setSaveInProgress(false);
+          return true;
+        } else {
+          console.error("Error al guardar los datos");
+          setNotificationMessage("Error al guardar los datos. Intenta de nuevo.");
+          setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 3000);
+          setSaveInProgress(false);
+          return false;
+        }
+      } catch (saveError) {
+        console.error("Exception in saveFormData:", saveError);
+        setNotificationMessage("Error al guardar los datos. Intenta de nuevo.");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 3000);
+        setSaveInProgress(false);
+        return false;
       }
-      
+    } catch (err) {
+      console.error('Error en handleSave:', err);
+      setNotificationMessage("Error al guardar los datos. Intenta de nuevo.");
       setShowNotification(true);
-      setNotificationMessage("Cambios guardados correctamente");
       setTimeout(() => setShowNotification(false), 3000);
-      
-      // Indicate success
-      setSaveInProgress(false);
-      return true;
-    } catch (error) {
-      console.error("Error saving form data:", error);
-      setShowNotification(true);
-      setNotificationMessage("Error al guardar los cambios. Intenta de nuevo.");
-      setTimeout(() => setShowNotification(false), 3000);
-      
-      // Indicate failure
       setSaveInProgress(false);
       return false;
     }
-  }, [formData, legalBusinessNameInput, taxIdInput, saveFormData, updateField, refreshData, localFormData, uploadFile]);
+  }, [formData, localFormData, saveFormData, updateField, refreshData, uploadFile, state.legalData, dispatch]);
 
   // Exponer la función handleSave a través de window.saveCurrentFormData
   useEffect(() => {
@@ -920,174 +1157,164 @@ const LegalData = () => {
 
   // Manejar cambios en las ubicaciones
   const handleLocationChange = (index: number, value: string) => {
-    console.log('Modificando ubicación:', {
-      index,
-      newValue: value,
-      currentLocation: (formData?.locations || [])[index],
-      allLocations: formData?.locations
-    });
-
-    const newLocations = [...(formData?.locations || [])];
-    if (!newLocations[index]) {
-      newLocations[index] = { name: '', nameConfirmed: false };
-    }
-
-    // Verificar duplicados
-    if (value.trim() !== '' && isDuplicateLocationName(value, index)) {
-      console.warn('Nombre de ubicación duplicado detectado:', value);
-      setLocationErrors(prev => ({
-        ...prev,
-        [index]: 'Este nombre de ubicación ya existe'
-      }));
-    } else {
-      setLocationErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[index];
-        return newErrors;
-      });
-    }
-
-    // Marcar que hay cambios sin guardar si el valor es diferente
-    if (newLocations[index].name !== value) {
-      setHasFormChanged(true);
-      
-      // Notify parent component that there are unsaved changes
-      if (window.onFormStateChange) {
-        window.onFormStateChange(true);
-      }
-    }
-
-    // Update the location name
-    newLocations[index].name = value;
+    if (!formData?.locations) return;
     
-    // Desconfirmar la ubicación si se cambia el nombre
-    newLocations[index].nameConfirmed = false;
+    // Create a copy of the locations array
+    const updatedLocations = [...formData.locations];
+    
+    // Update the location at the specified index
+    updatedLocations[index] = {
+      ...updatedLocations[index],
+      name: value,
+      nameConfirmed: false // Reset confirmation when name changes
+    };
     
     // Update local state
-    setLocalFormData(prev => ({ ...prev, locations: newLocations }));
+    setLocalFormData(prev => ({
+      ...prev,
+      locations: updatedLocations
+    }));
     
-    // Clear any existing timeout for this location
-    if ((window as any).locationUpdateTimeout) {
-      clearTimeout((window as any).locationUpdateTimeout);
-    }
+    // Update FormContext
+    dispatch({ type: 'SET_LOCATIONS', payload: updatedLocations as any });
     
-    // Debounce the update to the global state
-    (window as any).locationUpdateTimeout = setTimeout(() => {
-      console.log('Actualizando ubicaciones en el estado global:', newLocations);
-      updateField('locations', newLocations);
-      
-      // No need to save immediately here - this is just updating the field
-      // The user will need to click "Confirm" to officially confirm the location
-    }, 500);
+    // Update global state
+    updateField('locations', updatedLocations);
+    
+    // Mark form as changed
+    setHasFormChanged(true);
   };
 
   // Manejar confirmación de nombres de ubicación
   const handleLocationConfirm = (index: number) => {
-    console.log('Confirmando ubicación:', {
-      index,
-      location: (formData?.locations || [])[index]
-    });
-
-    // No permitir confirmar si hay un error
-    if (locationErrors[index]) {
-      console.warn('No se puede confirmar ubicación con errores:', locationErrors[index]);
-      return;
-    }
-
-    // No permitir confirmar si el nombre está vacío
-    if (!(formData?.locations || [])[index]?.name.trim()) {
-      console.warn('No se puede confirmar ubicación sin nombre');
-      return;
-    }
-
-    const newLocations = [...(formData?.locations || [])];
-    newLocations[index].nameConfirmed = true;
+    if (!formData?.locations) return;
     
-    console.log('Actualizando estado de confirmación:', newLocations[index]);
+    // Validate location name
+    const locationName = formData.locations[index].name.trim();
+    if (!locationName) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [`location_${index}`]: 'El nombre de la ubicación no puede estar vacío'
+      }));
+      return;
+    }
+    
+    // Check for duplicate names
+    if (isDuplicateLocationName(locationName, index)) {
+      setValidationErrors(prev => ({
+        ...prev,
+        [`location_${index}`]: 'Ya existe una ubicación con este nombre'
+      }));
+      return;
+    }
+    
+    // Clear validation error if any
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[`location_${index}`];
+      return newErrors;
+    });
+    
+    // Create a copy of the locations array
+    const updatedLocations = [...formData.locations];
+    
+    // Update the location at the specified index
+    updatedLocations[index] = {
+      ...updatedLocations[index],
+      name: locationName, // Use trimmed name
+      nameConfirmed: true
+    };
     
     // Update local state
-    setLocalFormData(prev => ({ ...prev, locations: newLocations }));
+    setLocalFormData(prev => ({
+      ...prev,
+      locations: updatedLocations
+    }));
+    
+    // Update FormContext
+    dispatch({ type: 'SET_LOCATIONS', payload: updatedLocations as any });
     
     // Update global state
-    updateField('locations', newLocations);
+    updateField('locations', updatedLocations);
     
-    // Mark that there are unsaved changes
+    // Mark form as changed
     setHasFormChanged(true);
     
-    // Save changes immediately to ensure they persist
-    console.log('Guardando ubicación confirmada...');
-    setSaveInProgress(true);
-    
-    // Use setTimeout to ensure state updates are processed before saving
-    setTimeout(() => {
-      saveFormData().then(() => {
-        console.log('Ubicación confirmada guardada correctamente');
-        setSaveInProgress(false);
-      }).catch(err => {
-        console.error('Error al guardar la ubicación confirmada:', err);
-        setSaveInProgress(false);
-      });
-    }, 100);
+    // Show success notification
+    setNotificationMessage(`Ubicación "${locationName}" confirmada`);
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 3000);
   };
 
   // Manejar cambios en grupos
   const handleGroupChange = (index: number, field: string, value: any) => {
-    const newGroups = [...(formData?.groups || [])];
-    if (!newGroups[index]) {
-      newGroups[index] = { id: Date.now().toString(), name: '', locations: [], nameConfirmed: true }
-    }
-
+    if (!formData?.groups) return;
+    
+    console.log(`Changing group ${index}, field ${field} to:`, value);
+    
+    // Create a copy of the groups array
+    const updatedGroups = [...formData.groups];
+    
+    // Special handling for locations field to ensure a location can only be in one group
     if (field === 'locations') {
-      const locationName = value[value.length - 1] // La ubicación que se está agregando/quitando
-      const isAdding = newGroups[index].locations.length < value.length // true si estamos agregando, false si estamos quitando
-
-      if (isAdding) {
-        // Remover la ubicación de otros grupos
-        newGroups.forEach((group, i) => {
-          if (i !== index) {
-            group.locations = group.locations.filter((loc: string) => loc !== locationName)
-          }
-        })
+      // Check if we're adding locations (by comparing lengths)
+      const isAddingLocations = value.length > updatedGroups[index].locations.length;
+      
+      if (isAddingLocations) {
+        // Find the newly added locations
+        const currentLocations: string[] = updatedGroups[index].locations || [];
+        const newlyAddedLocations: string[] = value.filter((loc: string) => !currentLocations.includes(loc));
         
-        console.log(`Agregando ubicación '${locationName}' al grupo ${index}:`, newGroups[index].name);
-      } else {
-        console.log(`Quitando ubicación del grupo ${index}:`, newGroups[index].name);
+        console.log('Newly added locations:', newlyAddedLocations);
+        
+        // Remove these locations from all other groups
+        if (newlyAddedLocations.length > 0) {
+          updatedGroups.forEach((group, groupIndex) => {
+            // Skip the current group we're adding to
+            if (groupIndex === index) return;
+            
+            // Remove any of the newly added locations from this group
+            group.locations = group.locations.filter(
+              (loc: string) => !newlyAddedLocations.includes(loc)
+            );
+          });
+        }
       }
     }
-
-    // Marcar que hay cambios sin guardar cuando se modifican los grupos
-    setHasFormChanged(true);
     
-    // Actualizar el campo del grupo de manera segura
+    // Update the group at the specified index
+    updatedGroups[index] = {
+      ...updatedGroups[index],
+      [field]: value
+    };
+    
+    // If changing the name, reset confirmation
     if (field === 'name') {
-      newGroups[index].name = value;
-    } else if (field === 'locations') {
-      newGroups[index].locations = value;
-    } else if (field === 'nameConfirmed') {
-      newGroups[index].nameConfirmed = value;
+      updatedGroups[index].nameConfirmed = false;
     }
     
     // Update local state
-    setLocalFormData(prev => ({ ...prev, groups: newGroups }));
+    setLocalFormData(prev => ({
+      ...prev,
+      groups: updatedGroups
+    }));
+    
+    // Update FormContext - use type assertion to avoid type errors
+    dispatch({ type: 'SET_MENU_GROUPS', payload: updatedGroups as any });
     
     // Update global state
-    updateField('groups', newGroups);
+    updateField('groups', updatedGroups);
     
-    // Save changes immediately to ensure they persist
-    console.log('Guardando cambios en grupos...');
-    setSaveInProgress(true);
+    // Mark form as changed
+    setHasFormChanged(true);
     
-    // Use setTimeout to ensure state updates are processed before saving
-    setTimeout(() => {
-      saveFormData().then(() => {
-        console.log('Cambios en grupos guardados correctamente', newGroups);
-        setSaveInProgress(false);
-      }).catch(err => {
-        console.error('Error al guardar los cambios en grupos:', err);
-        setSaveInProgress(false);
-      });
-    }, 100);
-  }
+    // Show notification for name changes
+    if (field === 'name') {
+      setNotificationMessage(`Nombre del grupo actualizado a "${value}"`);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
+    }
+  };
 
   // Generar nombre de grupo automáticamente
   const generateGroupName = (index: number) => {
@@ -1104,6 +1331,29 @@ const LegalData = () => {
     // Usar la función de validación global
     if (!window.validateCurrentStep?.()) {
       return;
+    }
+    
+    // Ensure FormContext is up to date before navigating
+    dispatch({ 
+      type: 'SET_LEGAL_DATA', 
+      payload: { 
+        ...state.legalData,
+        legalBusinessName: localFormData.legalBusinessName || formData?.legalBusinessName || '',
+        restaurantType: localFormData.restaurantType || formData?.restaurantType || '',
+        otherRestaurantType: localFormData.otherRestaurantType || formData?.otherRestaurantType || '',
+        taxId: localFormData.taxId || formData?.taxId || '',
+        sameMenuForAll: localFormData.sameMenuForAll !== undefined ? localFormData.sameMenuForAll : formData?.sameMenuForAll || true
+      } 
+    });
+    
+    // Update locations in FormContext
+    if (formData?.locations) {
+      dispatch({ type: 'SET_LOCATIONS', payload: formData.locations as any });
+    }
+    
+    // Update groups in FormContext
+    if (formData?.groups) {
+      dispatch({ type: 'SET_MENU_GROUPS', payload: formData.groups as any });
     }
     
     if (hasFormChanged) {
@@ -1170,14 +1420,56 @@ const LegalData = () => {
       }
       
       console.log("Saving before navigation");
-      const success = await handleSave();
-      if (success) {
-        console.log("Save successful, navigating");
+      
+      try {
+        // Ensure FormContext is up to date before saving
+        dispatch({ 
+          type: 'SET_LEGAL_DATA', 
+          payload: { 
+            ...state.legalData,
+            legalBusinessName: localFormData.legalBusinessName || formData?.legalBusinessName || '',
+            restaurantType: localFormData.restaurantType || formData?.restaurantType || '',
+            otherRestaurantType: localFormData.otherRestaurantType || formData?.otherRestaurantType || '',
+            taxId: localFormData.taxId || formData?.taxId || '',
+            sameMenuForAll: localFormData.sameMenuForAll !== undefined ? localFormData.sameMenuForAll : formData?.sameMenuForAll || true
+          } 
+        });
+        
+        // Update locations in FormContext
+        if (formData?.locations) {
+          console.log("Updating locations in SavePrompt:", formData.locations);
+          dispatch({ type: 'SET_LOCATIONS', payload: formData.locations as any });
+        } else {
+          console.warn("No locations found in formData");
+        }
+        
+        // Update groups in FormContext
+        if (formData?.groups) {
+          console.log("Updating groups in SavePrompt:", formData.groups);
+          dispatch({ type: 'SET_MENU_GROUPS', payload: formData.groups as any });
+        } else {
+          console.warn("No groups found in formData");
+        }
+        
+        // Give a short delay to ensure context updates have been processed
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        console.log("Calling handleSave from SavePrompt...");
+        const success = await handleSave();
+        
+        if (success) {
+          console.log("Save successful, navigating");
+          setShowSavePrompt(false);
+          navigate('/onboarding/contact-info');
+        } else {
+          console.error("Save failed in SavePrompt");
+          setShowSavePrompt(false);
+          setValidationMessages(prev => [...prev, "Error al guardar los datos. Por favor intenta nuevamente."]);
+        }
+      } catch (error) {
+        console.error("Exception in SavePrompt.handleSaveAndContinue:", error);
         setShowSavePrompt(false);
-        navigate('/onboarding/contact-info');
-      } else {
-        setShowSavePrompt(false);
-        setValidationMessages(prev => [...prev, "Error al guardar los datos. Por favor intenta nuevamente."]);
+        setValidationMessages(prev => [...prev, "Error inesperado al guardar los datos. Por favor intenta nuevamente."]);
       }
     };
 
@@ -1457,6 +1749,185 @@ const LegalData = () => {
     }, 100);
   };
 
+  // Inicializar datos del formulario
+  useEffect(() => {
+    if (formData) {
+      console.log("Initializing form data from useFormProgress:", formData);
+      
+      // Update local form data
+      setLocalFormData({
+        businessName: formData.businessName || '',
+        legalBusinessName: formData.legalBusinessName || '',
+        restaurantType: formData.restaurantType || '',
+        otherRestaurantType: formData.otherRestaurantType || '',
+        taxId: formData.taxId || '',
+        irsLetter: null,
+        legalDocuments: formData.legalDocuments || [],
+        locationCount: formData.locationCount || 1,
+        sameMenuForAll: formData.sameMenuForAll !== undefined ? formData.sameMenuForAll : true,
+        locations: formData.locations || [{ name: '', nameConfirmed: false }],
+        groups: formData.groups || []
+      });
+      
+      // Update FormContext with the data from useFormProgress
+      // This ensures the FormContext is in sync with the data from the API/localStorage
+      dispatch({ 
+        type: 'SET_LEGAL_DATA', 
+        payload: { 
+          legalBusinessName: formData.legalBusinessName || '',
+          restaurantType: formData.restaurantType || '',
+          otherRestaurantType: formData.otherRestaurantType || '',
+          taxId: formData.taxId || '',
+          irsLetter: null,
+          sameMenuForAll: formData.sameMenuForAll !== undefined ? formData.sameMenuForAll : true
+        } 
+      });
+      
+      // Update locations in FormContext
+      if (formData.locations && formData.locations.length > 0) {
+        dispatch({ type: 'SET_LOCATIONS', payload: formData.locations as any });
+      }
+      
+      // Update groups in FormContext
+      if (formData.groups && formData.groups.length > 0) {
+        dispatch({ type: 'SET_MENU_GROUPS', payload: formData.groups as any });
+      }
+      
+      // Update input fields for controlled components
+      setLegalBusinessNameInput(formData.legalBusinessName || '');
+      setTaxIdInput(formData.taxId || '');
+      setLocationCountInput(String(formData.locationCount || 1));
+    }
+  }, [formData, dispatch]);
+
+  // Add this useEffect at the beginning of the component
+  useEffect(() => {
+    // Check if the FormContext is properly initialized
+    try {
+      console.log('Checking FormContext on mount:', {
+        state: state,
+        dispatch: typeof dispatch === 'function' ? 'Function' : 'Not a function'
+      });
+      
+      // Log important state values
+      console.log('FormContext state values:', {
+        legalData: state.legalData,
+        locations: state.locations,
+        menuGroups: state.menuGroups,
+      });
+      
+      // Log formData for comparison
+      console.log('useFormProgress formData:', formData);
+      
+      // Check for any mismatches or missing data
+      if (!state.legalData) {
+        console.warn('FormContext.state.legalData is missing or undefined');
+      }
+      
+      if (!Array.isArray(state.locations)) {
+        console.warn('FormContext.state.locations is not an array');
+      }
+      
+      if (!Array.isArray(state.menuGroups)) {
+        console.warn('FormContext.state.menuGroups is not an array');
+      }
+      
+      // Check if dispatch is a function
+      if (typeof dispatch !== 'function') {
+        console.error('FormContext.dispatch is not a function');
+      }
+    } catch (error) {
+      console.error('Error checking FormContext:', error);
+    }
+  }, [state, dispatch, formData]);
+
+  // Add this useEffect after the debug useEffect
+  useEffect(() => {
+    // Synchronize FormContext with formData when the component mounts
+    const syncFormContextWithFormData = () => {
+      if (!formData || !dispatch) return;
+      
+      console.log('Synchronizing FormContext with formData on mount');
+      
+      try {
+        // Update legal data
+        dispatch({ 
+          type: 'SET_LEGAL_DATA', 
+          payload: { 
+            ...state.legalData,
+            legalBusinessName: formData.legalBusinessName || '',
+            restaurantType: formData.restaurantType || '',
+            otherRestaurantType: formData.otherRestaurantType || '',
+            taxId: formData.taxId || '',
+            sameMenuForAll: formData.sameMenuForAll ?? true
+          } 
+        });
+        
+        // Update locations
+        if (formData.locations && formData.locations.length > 0) {
+          console.log('Syncing locations:', formData.locations);
+          
+          // Asegurar que las ubicaciones tengan todos los campos necesarios
+          const validatedLocations = formData.locations.map(loc => ({
+            ...loc,
+            name: loc.name || '',
+            nameConfirmed: loc.nameConfirmed || false,
+            // No incluir id si no existe en el tipo Location
+          }));
+          
+          dispatch({ type: 'SET_LOCATIONS', payload: validatedLocations as any });
+          
+          // Actualizar también el estado local
+          setLocalFormData(prev => ({
+            ...prev,
+            locations: validatedLocations,
+            locationCount: validatedLocations.length
+          }));
+        }
+        
+        // Update groups
+        if (formData.groups && formData.groups.length > 0) {
+          console.log('Syncing groups:', formData.groups);
+          
+          // Asegurar que los grupos tengan todos los campos necesarios
+          const validatedGroups = formData.groups.map(group => ({
+            ...group,
+            id: group.id || `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            name: group.name || '',
+            locations: group.locations || [],
+            nameConfirmed: group.nameConfirmed || false
+          }));
+          
+          dispatch({ type: 'SET_MENU_GROUPS', payload: validatedGroups as any });
+          
+          // Actualizar también el estado local
+          setLocalFormData(prev => ({
+            ...prev,
+            groups: validatedGroups
+          }));
+        }
+        
+        // Actualizar los inputs controlados
+        if (formData.legalBusinessName) {
+          setLegalBusinessNameInput(formData.legalBusinessName);
+        }
+        
+        if (formData.taxId) {
+          setTaxIdInput(formData.taxId);
+        }
+        
+        console.log('FormContext synchronized successfully');
+      } catch (error) {
+        console.error('Error synchronizing FormContext with formData:', error);
+      }
+    };
+    
+    // Only run synchronization if formData is loaded and not null
+    if (formData) {
+      syncFormContextWithFormData();
+    }
+  }, [formData, dispatch]); // Eliminar dependencias innecesarias para evitar bucles
+
   return (
     <div className="max-w-5xl mx-auto p-6">
       <div className="space-y-10">
@@ -1470,30 +1941,23 @@ const LegalData = () => {
         <div className="grid grid-cols-1 gap-8">
           <div className="bg-white rounded-2xl shadow-xl p-8 transform transition-all duration-300 hover:shadow-2xl">
             <div className="space-y-6">
-              <div className="flex-1">
-                <label 
-                  htmlFor="legalBusinessName" 
-                  className="block text-sm font-medium text-gray-700 mb-1 flex items-center"
-                >
-                  Nombre Legal del Negocio (Nombre legalmente constituido para la LLC)
-                  <span className="text-red-500 ml-1">*</span>
+              <div className="mb-6">
+                <label htmlFor="legalBusinessName" className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                  Nombre Legal Registrado <span className="text-red-500 ml-1">*</span>
+                  <InformationCircleIcon className="h-4 w-4 text-gray-400 ml-1" title="Nombre legal con el que está registrado tu negocio" />
                 </label>
-                <div className="relative">
-                  <input
-                    id="legalBusinessName"
-                    type="text"
-                    value={legalBusinessNameInput}
-                    onChange={handleLegalBusinessNameChange}
-                    className={`block w-full px-4 py-3 rounded-lg border ${!legalBusinessNameInput.trim() ? 'border-red-300 ring-1 ring-red-300' : 'border-gray-300'} shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-colors duration-200`}
-                    placeholder="Nombre legal registrado"
-                  />
-                  {!legalBusinessNameInput.trim() && (
-                    <p className="mt-2 text-sm text-red-600">Este campo es obligatorio</p>
-                  )}
-                  <p className="mt-2 text-sm text-gray-500">
-                    Este debe ser el nombre exacto como aparece en los documentos legales de constitución de tu LLC.
-                  </p>
-                </div>
+                <input
+                  type="text"
+                  id="legalBusinessName"
+                  value={legalBusinessNameInput}
+                  onChange={handleLegalBusinessNameChange}
+                  className={`block w-full px-4 py-3 rounded-lg border ${!legalBusinessNameInput.trim() ? 'border-red-300 ring-1 ring-red-300' : 'border-gray-300'} shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-colors duration-200`}
+                  placeholder="Nombre legal registrado"
+                  onBlur={handleLegalBusinessNameBlur}
+                />
+                {!legalBusinessNameInput.trim() && (
+                  <p className="mt-1 text-sm text-red-600">Este campo es obligatorio</p>
+                )}
               </div>
 
               <MemoizedSelect
@@ -1516,6 +1980,7 @@ const LegalData = () => {
                     onChange={(e) => handleFieldChange('otherRestaurantType', e.target.value)}
                     className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-400 focus:border-transparent transition duration-200 shadow-sm"
                     placeholder="Describe el tipo de restaurante"
+                    onBlur={handleTaxIdBlur}
                   />
                 </div>
               )}
@@ -1529,18 +1994,17 @@ const LegalData = () => {
                   htmlFor="taxId" 
                   className="block text-sm font-medium text-gray-700 mb-1 flex items-center"
                 >
-                  Tax ID
+                  Tax ID <span className="text-red-500 ml-1">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    id="taxId"
-                    type="text"
-                    value={taxIdInput}
-                    onChange={handleTaxIdChange}
-                    className="block w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-colors duration-200"
-                    placeholder="Ingresa tu Tax ID"
-                  />
-                </div>
+                <input
+                  type="text"
+                  id="taxId"
+                  value={taxIdInput}
+                  onChange={handleTaxIdChange}
+                  className="block w-full px-4 py-3 rounded-lg border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 transition-colors duration-200"
+                  placeholder="Ingresa tu Tax ID"
+                  onBlur={handleTaxIdBlur}
+                />
               </div>
             </div>
           </div>

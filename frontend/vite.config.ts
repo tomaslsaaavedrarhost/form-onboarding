@@ -20,11 +20,14 @@ export default defineConfig({
     open: true,
     hmr: {
       overlay: true,
-      timeout: 5000,
+      timeout: 1000,
+      clientPort: 3000,
+      host: 'localhost',
     },
     watch: {
       usePolling: true,
-      interval: 1000,
+      interval: 50,
+      ignored: ['**/node_modules/**', '**/.git/**'],
     },
   }
 }) 

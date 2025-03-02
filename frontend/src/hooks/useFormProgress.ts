@@ -298,6 +298,7 @@ export const useFormProgress = () => {
   const [error, setError] = useState<string | null>(null);
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const formContext = useForm();
 
   // Load user's form
   useEffect(() => {
@@ -346,128 +347,168 @@ export const useFormProgress = () => {
   // Save form data
   const saveFormData = async () => {
     try {
-      if (!user) return false;
-
-      // Get state from context
-      let formContext;
-      try {
-        formContext = useForm();
-      } catch (error) {
-        console.error("Error accessing form context:", error);
+      if (!user) {
+        console.error("No user found");
+        return false;
       }
 
-      // Si es un usuario de demostración, guardar en localStorage
-      if (isDemoUser(user)) {
-        // Obtener datos actuales del contexto o usar los proporcionados
-        const state = formContext?.state;
-        
-        if (!state) {
-          console.error("Form context state not available");
-          return false;
-        }
-        
-        // Preparar datos para guardar
-        const dataToSave: Partial<FormData> = {
-          // Datos básicos
-          language: state.language,
-          
-          // Datos legales
-          legalBusinessName: state.legalData.legalBusinessName,
-          restaurantType: state.legalData.restaurantType,
-          otherRestaurantType: state.legalData.otherRestaurantType,
-          taxId: state.legalData.taxId,
-          sameMenuForAll: state.legalData.sameMenuForAll,
-          
-          // Datos de contacto
-          contactName: state.contactInfo.contactName,
-          phone: state.contactInfo.phone,
-          email: state.contactInfo.email,
-          address: state.contactInfo.address,
-          city: state.contactInfo.city,
-          state: state.contactInfo.state,
-          zipCode: state.contactInfo.zipCode,
-          sameForAllLocations: state.contactInfo.sameForAllLocations,
-          
-          // Configuración de IA
-          aiPreferences: {
-            language: state.aiConfig.language,
-            tone: state.aiConfig.personality?.join(','),
-            specialties: state.aiConfig.personality,
-            assistantName: state.aiConfig.assistantName,
-            assistantGender: state.aiConfig.assistantGender,
-            otherPersonality: state.aiConfig.otherPersonality,
-            additionalInfo: state.aiConfig.additionalInfo
-          },
-          
-          // Notas adicionales
-          additionalNotes: state.additionalNotes,
-          termsAccepted: state.termsAccepted,
-          
-          // Metadatos
-          lastUpdated: new Date()
-        };
-        
-        console.log("Saving form data to localStorage:", dataToSave);
-        return saveDemoFormData(dataToSave);
+      // No need to get form context here, use the one from the parent component
+      if (!formContext) {
+        console.error("Form context is not available");
+        return false;
       }
 
-      // Para usuarios reales, guardar en Firestore
-      const userId = getUserId(user);
-      const docRef = doc(db, 'formProgress', userId);
-      
-      // Obtener datos del contexto
-      const state = formContext?.state;
+      const state = formContext.state;
       
       if (!state) {
         console.error("Form context state not available");
         return false;
       }
-      
-      // Preparar datos para guardar
-      const dataToSave: Partial<FormData> = {
-        // Datos básicos
-        language: state.language,
+
+      console.log("Saving form data with state:", state);
+
+      // Si es un usuario de demostración, guardar en localStorage
+      if (isDemoUser(user)) {
+        try {
+          // Preparar datos para guardar
+          const dataToSave: Partial<FormData> = {
+            // Datos básicos
+            language: state.language || '',
+            
+            // Datos legales
+            legalBusinessName: state.legalData?.legalBusinessName || '',
+            restaurantType: state.legalData?.restaurantType || '',
+            otherRestaurantType: state.legalData?.otherRestaurantType || '',
+            taxId: state.legalData?.taxId || '',
+            sameMenuForAll: state.legalData?.sameMenuForAll ?? true,
+            
+            // Also save locations and groups
+            locations: Array.isArray(state.locations) ? state.locations.map(loc => ({
+              name: loc?.name || '',
+              nameConfirmed: loc?.nameConfirmed ?? false,
+              id: loc?.id || ''
+            })) : [],
+            
+            groups: Array.isArray(state.menuGroups) ? state.menuGroups.map(group => ({
+              id: group?.name || 'default',
+              name: group?.name || '',
+              locations: Array.isArray(group?.locations) ? group.locations : [],
+              nameConfirmed: true
+            })) : [],
+            
+            // Datos de contacto
+            contactName: state.contactInfo?.contactName || '',
+            phone: state.contactInfo?.phone || '',
+            email: state.contactInfo?.email || '',
+            address: state.contactInfo?.address || '',
+            city: state.contactInfo?.city || '',
+            state: state.contactInfo?.state || '',
+            zipCode: state.contactInfo?.zipCode || '',
+            sameForAllLocations: state.contactInfo?.sameForAllLocations ?? true,
+            
+            // Configuración de IA
+            aiPreferences: {
+              language: state.aiConfig?.language || 'en',
+              tone: Array.isArray(state.aiConfig?.personality) 
+                ? state.aiConfig.personality.join(',') 
+                : '',
+              specialties: Array.isArray(state.aiConfig?.personality) 
+                ? state.aiConfig.personality 
+                : [],
+              assistantName: state.aiConfig?.assistantName || '',
+              assistantGender: state.aiConfig?.assistantGender || '',
+              otherPersonality: state.aiConfig?.otherPersonality || '',
+              additionalInfo: state.aiConfig?.additionalInfo || ''
+            },
+            
+            // Notas adicionales
+            additionalNotes: state.additionalNotes || '',
+            termsAccepted: state.termsAccepted ?? false,
+            
+            // Metadatos
+            lastUpdated: new Date()
+          };
+          
+          console.log("Saving form data to localStorage:", dataToSave);
+          return saveDemoFormData(dataToSave);
+        } catch (error) {
+          console.error("Error preparing demo user data:", error);
+          return false;
+        }
+      }
+
+      // Para usuarios reales, guardar en Firestore
+      try {
+        const userId = getUserId(user);
+        const docRef = doc(db, 'formProgress', userId);
         
-        // Datos legales
-        legalBusinessName: state.legalData.legalBusinessName,
-        restaurantType: state.legalData.restaurantType,
-        otherRestaurantType: state.legalData.otherRestaurantType,
-        taxId: state.legalData.taxId,
-        sameMenuForAll: state.legalData.sameMenuForAll,
+        // Preparar datos para guardar
+        const dataToSave: Partial<FormData> = {
+          // Datos básicos
+          language: state.language || '',
+          
+          // Datos legales
+          legalBusinessName: state.legalData?.legalBusinessName || '',
+          restaurantType: state.legalData?.restaurantType || '',
+          otherRestaurantType: state.legalData?.otherRestaurantType || '',
+          taxId: state.legalData?.taxId || '',
+          sameMenuForAll: state.legalData?.sameMenuForAll ?? true,
+          
+          // Also save locations and groups
+          locations: Array.isArray(state.locations) ? state.locations.map(loc => ({
+            name: loc?.name || '',
+            nameConfirmed: loc?.nameConfirmed ?? false,
+            id: loc?.id || ''
+          })) : [],
+          
+          groups: Array.isArray(state.menuGroups) ? state.menuGroups.map(group => ({
+            id: group?.name || 'default',
+            name: group?.name || '',
+            locations: Array.isArray(group?.locations) ? group.locations : [],
+            nameConfirmed: true
+          })) : [],
+          
+          // Datos de contacto
+          contactName: state.contactInfo?.contactName || '',
+          phone: state.contactInfo?.phone || '',
+          email: state.contactInfo?.email || '',
+          address: state.contactInfo?.address || '',
+          city: state.contactInfo?.city || '',
+          state: state.contactInfo?.state || '',
+          zipCode: state.contactInfo?.zipCode || '',
+          sameForAllLocations: state.contactInfo?.sameForAllLocations ?? true,
+          
+          // Configuración de IA
+          aiPreferences: {
+            language: state.aiConfig?.language || 'en',
+            tone: Array.isArray(state.aiConfig?.personality) 
+              ? state.aiConfig.personality.join(',') 
+              : '',
+            specialties: Array.isArray(state.aiConfig?.personality) 
+              ? state.aiConfig.personality 
+              : [],
+            assistantName: state.aiConfig?.assistantName || '',
+            assistantGender: state.aiConfig?.assistantGender || '',
+            otherPersonality: state.aiConfig?.otherPersonality || '',
+            additionalInfo: state.aiConfig?.additionalInfo || ''
+          },
+          
+          // Notas adicionales
+          additionalNotes: state.additionalNotes || '',
+          termsAccepted: state.termsAccepted ?? false,
+          
+          // Metadatos
+          lastUpdated: new Date(),
+          ownerEmail: user.email || ''
+        };
         
-        // Datos de contacto
-        contactName: state.contactInfo.contactName,
-        phone: state.contactInfo.phone,
-        email: state.contactInfo.email,
-        address: state.contactInfo.address,
-        city: state.contactInfo.city,
-        state: state.contactInfo.state,
-        zipCode: state.contactInfo.zipCode,
-        sameForAllLocations: state.contactInfo.sameForAllLocations,
-        
-        // Configuración de IA
-        aiPreferences: {
-          language: state.aiConfig.language,
-          tone: state.aiConfig.personality?.join(','),
-          specialties: state.aiConfig.personality,
-          assistantName: state.aiConfig.assistantName,
-          assistantGender: state.aiConfig.assistantGender,
-          otherPersonality: state.aiConfig.otherPersonality,
-          additionalInfo: state.aiConfig.additionalInfo
-        },
-        
-        // Notas adicionales
-        additionalNotes: state.additionalNotes,
-        termsAccepted: state.termsAccepted,
-        
-        // Metadatos
-        lastUpdated: new Date(),
-        ownerEmail: user.email || ''
-      };
-      
-      await setDoc(docRef, dataToSave, { merge: true });
-      setUnsavedChanges(false);
-      return true;
+        await setDoc(docRef, dataToSave, { merge: true });
+        setUnsavedChanges(false);
+        return true;
+      } catch (error) {
+        console.error("Error saving data to Firestore:", error);
+        return false;
+      }
     } catch (error) {
       console.error('Error saving form data:', error);
       return false;
