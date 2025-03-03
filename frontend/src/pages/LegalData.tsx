@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useFormProgress } from '../hooks/useFormProgress'
+import { useFormProgress, refreshFormDataWithUser } from '../hooks/useFormProgress'
 import { useTranslation } from '../hooks/useTranslation'
 import { TrashIcon, MapPinIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
 import { useForm } from '../context/FormContext'
+import { useAuth } from '../lib/AuthContext'
 
 interface Location {
   name: string
@@ -177,6 +178,7 @@ const LegalData = () => {
   const { formData, updateField, saveFormData, uploadFile, refreshData, saveField } = useFormProgress()
   const { state, dispatch } = useForm() // Add FormContext
   const { t } = useTranslation()
+  const { user } = useAuth() // Añadimos user de useAuth para obtener el usuario actual
   const [localFormData, setLocalFormData] = useState<FormState>({
     businessName: '',
     legalBusinessName: '',
@@ -227,6 +229,9 @@ const LegalData = () => {
 
   // Estado para rastrear grupos recién creados
   const [newlyCreatedGroups, setNewlyCreatedGroups] = useState<string[]>([]);
+
+  // Estado para controlar si estamos esperando datos de Firebase
+  const [isLoadingFromFirebase, setIsLoadingFromFirebase] = useState(true);
 
   // Funciones memorizadas para evitar recreaciones en cada renderizado
   const handleLegalBusinessNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -533,47 +538,45 @@ const LegalData = () => {
 
   // Cargar datos existentes
   useEffect(() => {
-    if (formData) {
-      // Asegurarse de que locationCount siempre sea un número válido
-      let locationCount = 1; // Valor predeterminado
-      
-      if (typeof formData.locationCount === 'number' && !isNaN(formData.locationCount) && formData.locationCount >= 1) {
-        locationCount = formData.locationCount;
-      } else if (typeof formData.locationCount === 'string') {
-        // Intentar convertir de string a número si es necesario
-        const parsedCount = parseInt(formData.locationCount);
-        if (!isNaN(parsedCount) && parsedCount >= 1) {
-          locationCount = parsedCount;
-          // Actualizar el valor correcto en el formData
-          updateField('locationCount', locationCount);
-        }
-      } else if (formData.locationCount === undefined || formData.locationCount === null) {
-        // Si no existe, inicializar con 1
-        updateField('locationCount', 1);
-      }
-      
-      // Inicializar el valor de entrada
-      setLocationCountInput(locationCount.toString());
-      
-      // Actualizar el estado local
+    if (formData && hasSignificantData(formData)) {
+      console.log("Initializing form data from useFormProgress with valid data:", formData);
       setLocalFormData(prev => ({
         ...prev,
-        legalBusinessName: formData.businessName || '',
-        taxId: formData.taxId || '',
-        restaurantType: formData.restaurantType || '',
-        otherRestaurantType: formData.otherRestaurantType || '',
-        locationCount: locationCount,
-        sameMenuForAll: formData.sameMenuForAll ?? true,
-        locations: formData.locations || Array(locationCount).fill(null).map(() => ({ name: '', nameConfirmed: false })),
-        groups: formData.groups || []
+        // Actualizamos cada campo solo si en formData hay un valor "real"
+        businessName: formData.businessName ? formData.businessName : prev.businessName,
+        legalBusinessName: formData.legalBusinessName ? formData.legalBusinessName : prev.legalBusinessName,
+        restaurantType: formData.restaurantType ? formData.restaurantType : prev.restaurantType,
+        otherRestaurantType: formData.otherRestaurantType ? formData.otherRestaurantType : prev.otherRestaurantType,
+        taxId: formData.taxId ? formData.taxId : prev.taxId,
+        // Para irsLetter usamos la comparación explícita (ya que podría ser null)
+        irsLetter: formData.irsLetter !== undefined ? formData.irsLetter : prev.irsLetter,
+        // Si legalDocuments es un array no vacío, lo actualizamos; de lo contrario, mantenemos lo que ya teníamos
+        legalDocuments: Array.isArray(formData.legalDocuments) && formData.legalDocuments.length > 0 
+                          ? formData.legalDocuments 
+                          : prev.legalDocuments,
+        // Si formData.locationCount está definido (incluso si es 0) lo usamos; de lo contrario, preservamos prev.locationCount
+        locationCount: formData.locationCount !== undefined ? formData.locationCount : prev.locationCount,
+        // Lo mismo para sameMenuForAll
+        sameMenuForAll: formData.sameMenuForAll !== undefined ? formData.sameMenuForAll : prev.sameMenuForAll,
+        // Para locations y groups, si son arrays (aunque estén vacíos) los actualizamos; si no, dejamos lo anterior
+        locations: Array.isArray(formData.locations) ? formData.locations : prev.locations,
+        groups: Array.isArray(formData.groups) ? formData.groups : prev.groups,
       }));
-      
-      // Inicializar campos locales desde formData
-      setLegalBusinessNameInput(formData.legalBusinessName || '');
-      setTaxIdInput(formData.taxId || '');
+  
+      // Actualizamos también los inputs controlados, si existe data real.
+      if (formData.legalBusinessName) {
+        setLegalBusinessNameInput(formData.legalBusinessName);
+      }
+      if (formData.taxId) {
+        setTaxIdInput(formData.taxId);
+      }
+      if (formData.locationCount !== undefined) {
+        setLocationCountInput(String(formData.locationCount));
+      }
+    } else {
+      console.log("formData exists but doesn't have significant data, skipping initialization");
     }
-  }, [formData])
-
+  }, [formData]);
   // Optimizamos el useEffect para que solo actualice cuando realmente cambie formData
   useEffect(() => {
     if (!formData) return;
@@ -646,7 +649,9 @@ const LegalData = () => {
     // Update locationCountInput when locationCount changes
     setLocationCountInput(locationCount.toString());
     
-    // Preservar las ubicaciones existentes y agregar nuevas si es necesario
+    // Preservar las ubicaciones existentes sin crear nuevas automáticamente
+    // Comentado para evitar sobreescribir datos reales de Firestore
+    /*
     const updatedLocations = Array(locationCount).fill(null).map((_, index) => {
       // Intentar mantener la ubicación existente si existe
       const existingLocation = formData.locations?.[index] || formData.locations?.[index];
@@ -658,6 +663,10 @@ const LegalData = () => {
       console.log(`Creando nueva ubicación ${index}`);
       return { name: '', nameConfirmed: false };
     });
+    */
+    
+    // Usar las ubicaciones existentes sin forzar la creación de nuevas
+    const updatedLocations = formData.locations || [];
 
     // Preservar legalDocuments si acabamos de actualizarlo
     if (lastLegalDocsUpdateRef.current.length > 0) {
@@ -705,26 +714,6 @@ const LegalData = () => {
       actualLocations: formData?.locations?.length,
       locations: formData?.locations
     });
-
-    // Validar que la cantidad de ubicaciones coincida con locationCount
-    if (formData?.locationCount !== formData?.locations?.length) {
-      console.warn('Inconsistencia detectada: locationCount no coincide con el número de ubicaciones');
-      
-      // Ajustar el array de ubicaciones para que coincida con locationCount
-      const newLocations = Array(formData?.locationCount || 1).fill(null).map((_, index) => {
-        return (formData?.locations || [])[index] || { name: '', nameConfirmed: false };
-      });
-      
-      console.log('Ajustando array de ubicaciones:', newLocations);
-      
-      setLocalFormData(prev => ({
-        ...prev,
-        locations: newLocations
-      }));
-      
-      // Actualizar el estado global
-      updateField('locations', newLocations);
-    }
 
     // Validar que no haya ubicaciones vacías si están confirmadas
     const hasInvalidLocations = (formData?.locations || []).some(
@@ -1749,57 +1738,40 @@ const LegalData = () => {
     }, 100);
   };
 
-  // Inicializar datos del formulario
-  useEffect(() => {
-    if (formData) {
-      console.log("Initializing form data from useFormProgress:", formData);
-      
-      // Update local form data
-      setLocalFormData({
-        businessName: formData.businessName || '',
-        legalBusinessName: formData.legalBusinessName || '',
-        restaurantType: formData.restaurantType || '',
-        otherRestaurantType: formData.otherRestaurantType || '',
-        taxId: formData.taxId || '',
-        irsLetter: null,
-        legalDocuments: formData.legalDocuments || [],
-        locationCount: formData.locationCount || 1,
-        sameMenuForAll: formData.sameMenuForAll !== undefined ? formData.sameMenuForAll : true,
-        locations: formData.locations || [{ name: '', nameConfirmed: false }],
-        groups: formData.groups || []
-      });
-      
-      // Update FormContext with the data from useFormProgress
-      // This ensures the FormContext is in sync with the data from the API/localStorage
-      dispatch({ 
-        type: 'SET_LEGAL_DATA', 
-        payload: { 
-          legalBusinessName: formData.legalBusinessName || '',
-          restaurantType: formData.restaurantType || '',
-          otherRestaurantType: formData.otherRestaurantType || '',
-          taxId: formData.taxId || '',
-          irsLetter: null,
-          sameMenuForAll: formData.sameMenuForAll !== undefined ? formData.sameMenuForAll : true
-        } 
-      });
-      
-      // Update locations in FormContext
-      if (formData.locations && formData.locations.length > 0) {
-        dispatch({ type: 'SET_LOCATIONS', payload: formData.locations as any });
-      }
-      
-      // Update groups in FormContext
-      if (formData.groups && formData.groups.length > 0) {
-        dispatch({ type: 'SET_MENU_GROUPS', payload: formData.groups as any });
-      }
-      
-      // Update input fields for controlled components
-      setLegalBusinessNameInput(formData.legalBusinessName || '');
-      setTaxIdInput(formData.taxId || '');
-      setLocationCountInput(String(formData.locationCount || 1));
-    }
-  }, [formData, dispatch]);
-
+  // Inicializar datos del formulario (solo si formData tiene propiedades)
+useEffect(() => {
+  if (formData && Object.keys(formData).length > 0) {
+    console.log("Initializing form data from useFormProgress with formData:", formData);
+    setLocalFormData({
+      businessName: formData.businessName || localFormData.businessName,
+      legalBusinessName: formData.legalBusinessName || localFormData.legalBusinessName,
+      restaurantType: formData.restaurantType || localFormData.restaurantType,
+      otherRestaurantType: formData.otherRestaurantType || localFormData.otherRestaurantType,
+      taxId: formData.taxId || localFormData.taxId,
+      irsLetter: formData.irsLetter !== undefined ? formData.irsLetter : localFormData.irsLetter,
+      legalDocuments: Array.isArray(formData.legalDocuments) && formData.legalDocuments.length > 0
+                        ? formData.legalDocuments
+                        : localFormData.legalDocuments,
+      locationCount: formData.locationCount !== undefined
+                        ? formData.locationCount
+                        : localFormData.locationCount,
+      sameMenuForAll: formData.sameMenuForAll !== undefined
+                        ? formData.sameMenuForAll
+                        : localFormData.sameMenuForAll,
+      locations: Array.isArray(formData.locations) && formData.locations.length > 0
+                        ? formData.locations
+                        : localFormData.locations,
+      groups: Array.isArray(formData.groups) && formData.groups.length > 0
+                        ? formData.groups
+                        : localFormData.groups,
+    });
+    setLegalBusinessNameInput(formData.legalBusinessName || legalBusinessNameInput);
+    setTaxIdInput(formData.taxId || taxIdInput);
+    setLocationCountInput(formData.locationCount !== undefined ? String(formData.locationCount) : locationCountInput);
+  } else {
+    console.log("No valid formData found; not updating local state");
+  }
+}, [formData]);
   // Add this useEffect at the beginning of the component
   useEffect(() => {
     // Check if the FormContext is properly initialized
@@ -1841,92 +1813,127 @@ const LegalData = () => {
     }
   }, [state, dispatch, formData]);
 
-  // Add this useEffect after the debug useEffect
+  const hasSignificantValue = (value: any, fieldName?: keyof FormState): boolean => {
+    if (value === undefined) return false;
+    // Para null, solo es válido en irsLetter
+    if (value === null && fieldName !== 'irsLetter') return false;
+    // Consideramos significativos todos los demás valores
+    return true;
+  };
+  
+  const hasSignificantData = (data: any): boolean => {
+    if (!data) return false;
+    // Consideramos que hay data significativa si existen al menos los campos básicos:
+    return (
+      hasSignificantValue(data.businessName) ||
+      hasSignificantValue(data.legalBusinessName) ||
+      (Array.isArray(data.locations) && data.locations.length > 0)
+    );
+  };
+
+  // useEffect para sincronizar datos desde Firebase
   useEffect(() => {
-    // Synchronize FormContext with formData when the component mounts
-    const syncFormContextWithFormData = () => {
-      if (!formData || !dispatch) return;
-      
-      console.log('Synchronizing FormContext with formData on mount');
-      
+    const syncFormData = async () => {
+      if (!user) return;
+
       try {
-        // Update legal data
-        dispatch({ 
-          type: 'SET_LEGAL_DATA', 
-          payload: { 
-            ...state.legalData,
-            legalBusinessName: formData.legalBusinessName || '',
-            restaurantType: formData.restaurantType || '',
-            otherRestaurantType: formData.otherRestaurantType || '',
-            taxId: formData.taxId || '',
-            sameMenuForAll: formData.sameMenuForAll ?? true
-          } 
-        });
-        
-        // Update locations
-        if (formData.locations && formData.locations.length > 0) {
-          console.log('Syncing locations:', formData.locations);
+        if (isLoadingFromFirebase) {
+          console.log("Cargando datos desde Firebase...");
+          const freshData = await refreshFormDataWithUser(user);
           
-          // Asegurar que las ubicaciones tengan todos los campos necesarios
-          const validatedLocations = formData.locations.map(loc => ({
-            ...loc,
-            name: loc.name || '',
-            nameConfirmed: loc.nameConfirmed || false,
-            // No incluir id si no existe en el tipo Location
-          }));
-          
-          dispatch({ type: 'SET_LOCATIONS', payload: validatedLocations as any });
-          
-          // Actualizar también el estado local
-          setLocalFormData(prev => ({
-            ...prev,
-            locations: validatedLocations,
-            locationCount: validatedLocations.length
-          }));
+          if (freshData) {
+            console.log("Datos recibidos de Firebase:", freshData);
+            
+            setLocalFormData(prev => {
+              // Solo actualizamos si hay datos reales
+              const updatedState = { ...prev };
+              
+              // Nunca usamos valores por defecto, solo actualizamos si hay datos reales
+              if (freshData.businessName) updatedState.businessName = freshData.businessName;
+              if (freshData.legalBusinessName) updatedState.legalBusinessName = freshData.legalBusinessName;
+              if (freshData.restaurantType) updatedState.restaurantType = freshData.restaurantType;
+              if (freshData.otherRestaurantType) updatedState.otherRestaurantType = freshData.otherRestaurantType;
+              if (freshData.taxId) updatedState.taxId = freshData.taxId;
+              if (freshData.irsLetter !== undefined) updatedState.irsLetter = freshData.irsLetter;
+              if (Array.isArray(freshData.legalDocuments)) updatedState.legalDocuments = freshData.legalDocuments;
+              if (typeof freshData.locationCount === 'number') updatedState.locationCount = freshData.locationCount;
+              if (typeof freshData.sameMenuForAll === 'boolean') updatedState.sameMenuForAll = freshData.sameMenuForAll;
+              if (Array.isArray(freshData.locations)) updatedState.locations = freshData.locations;
+              if (Array.isArray(freshData.groups)) updatedState.groups = freshData.groups;
+
+              console.log("Estado actualizado desde Firebase:", updatedState);
+              return updatedState;
+            });
+
+            // Solo actualizamos los inputs controlados si hay datos reales
+            if (freshData.legalBusinessName) {
+              setLegalBusinessNameInput(freshData.legalBusinessName);
+            }
+            if (freshData.taxId) {
+              setTaxIdInput(freshData.taxId);
+            }
+          }
         }
-        
-        // Update groups
-        if (formData.groups && formData.groups.length > 0) {
-          console.log('Syncing groups:', formData.groups);
-          
-          // Asegurar que los grupos tengan todos los campos necesarios
-          const validatedGroups = formData.groups.map(group => ({
-            ...group,
-            id: group.id || `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            name: group.name || '',
-            locations: group.locations || [],
-            nameConfirmed: group.nameConfirmed || false
-          }));
-          
-          dispatch({ type: 'SET_MENU_GROUPS', payload: validatedGroups as any });
-          
-          // Actualizar también el estado local
-          setLocalFormData(prev => ({
-            ...prev,
-            groups: validatedGroups
-          }));
-        }
-        
-        // Actualizar los inputs controlados
-        if (formData.legalBusinessName) {
-          setLegalBusinessNameInput(formData.legalBusinessName);
-        }
-        
-        if (formData.taxId) {
-          setTaxIdInput(formData.taxId);
-        }
-        
-        console.log('FormContext synchronized successfully');
       } catch (error) {
-        console.error('Error synchronizing FormContext with formData:', error);
+        console.error("Error al sincronizar datos desde Firebase:", error);
       }
     };
-    
-    // Only run synchronization if formData is loaded and not null
-    if (formData) {
-      syncFormContextWithFormData();
+
+    syncFormData();
+  }, [user, isLoadingFromFirebase]);
+
+  // useEffect para sincronizar datos del contexto
+  useEffect(() => {
+    if (!formData) return;
+
+    // Solo actualizamos si hay cambios reales
+    const hasRealChanges = Object.entries(formData).some(([key, value]) => {
+      if (value === undefined || value === null) return false;
+      if (Array.isArray(value) && value.length === 0) return false;
+      if (value === '') return false;
+      return true;
+    });
+
+    if (hasRealChanges) {
+      console.log("Cambios reales detectados en formData:", formData);
+      
+      setLocalFormData(prev => {
+        const updatedState = { ...prev };
+        
+        // Solo actualizamos campos que tengan valores reales
+        if (formData.businessName) updatedState.businessName = formData.businessName;
+        if (formData.legalBusinessName) updatedState.legalBusinessName = formData.legalBusinessName;
+        if (formData.restaurantType) updatedState.restaurantType = formData.restaurantType;
+        if (formData.otherRestaurantType) updatedState.otherRestaurantType = formData.otherRestaurantType;
+        if (formData.taxId) updatedState.taxId = formData.taxId;
+        if (formData.irsLetter !== undefined) updatedState.irsLetter = formData.irsLetter;
+        if (Array.isArray(formData.legalDocuments) && formData.legalDocuments.length > 0) {
+          updatedState.legalDocuments = formData.legalDocuments;
+        }
+        if (typeof formData.locationCount === 'number') updatedState.locationCount = formData.locationCount;
+        if (typeof formData.sameMenuForAll === 'boolean') updatedState.sameMenuForAll = formData.sameMenuForAll;
+        if (Array.isArray(formData.locations) && formData.locations.length > 0) {
+          updatedState.locations = formData.locations;
+        }
+        if (Array.isArray(formData.groups) && formData.groups.length > 0) {
+          updatedState.groups = formData.groups;
+        }
+
+        console.log("Estado actualizado desde formData:", updatedState);
+        return updatedState;
+      });
+
+      // Solo actualizamos los inputs controlados si hay datos reales
+      if (formData.legalBusinessName) {
+        setLegalBusinessNameInput(formData.legalBusinessName);
+      }
+      if (formData.taxId) {
+        setTaxIdInput(formData.taxId);
+      }
+    } else {
+      console.log("No hay cambios reales en formData, manteniendo estado actual");
     }
-  }, [formData, dispatch]); // Eliminar dependencias innecesarias para evitar bucles
+  }, [formData]);
 
   return (
     <div className="max-w-5xl mx-auto p-6">

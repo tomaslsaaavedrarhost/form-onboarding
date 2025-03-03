@@ -38,10 +38,9 @@ const loadDemoFormData = (): FormData => {
 };
 
 // Function to check if user is in demo mode
-const getIsDemo = (): boolean => {
+const getIsDemo = (user: any): boolean => {
   try {
-    const auth = useAuth();
-    return isDemoUser(auth?.user);
+    return isDemoUser(user);
   } catch (error) {
     console.error("Error checking demo mode:", error);
     return false;
@@ -49,16 +48,10 @@ const getIsDemo = (): boolean => {
 };
 
 // Standalone function to refresh form data from localStorage or API
-export async function refreshFormData(): Promise<FormData | null> {
+export async function refreshFormDataWithUser(user: any): Promise<FormData | null> {
   try {
-    // Get auth in a safe way
-    let isDemo = false;
-    try {
-      const auth = useAuth();
-      isDemo = isDemoUser(auth?.user);
-    } catch (error) {
-      console.error("Error accessing auth:", error);
-    }
+    // Determine if user is in demo mode
+    const isDemo = isDemoUser(user);
     
     console.log("Refreshing form data, demo mode:", isDemo);
     
@@ -190,6 +183,12 @@ export interface FormData {
   tipsEnabled?: boolean;
   tipPercentages?: number[];
   tipDistribution?: string;
+  tipsPolicy?: {
+    policyMode: 'individual' | 'single' | 'grouped';
+    locationPolicies: {[key: string]: any};
+    groupPolicies: {[key: string]: any};
+    locationGroups: {[key: string]: string[]};
+  };
 
   // Observations
   additionalNotes?: string;
@@ -237,11 +236,18 @@ function saveDemoFormData(data: Partial<FormData>, combinedWithExisting: boolean
       // Log the data being saved for debugging
       console.log("Combined form data to save:", formDataToSave);
     } else {
+      // Obtener datos existentes para referencia
+      const existingData = loadDemoFormData() || {};
+      
       // Usar solo los datos proporcionados
       formDataToSave = {
         ...data,
         // Asegurar que campos críticos nunca sean nulos o undefined 
-        locationCount: data.locationCount ?? 1,
+        locationCount: data.locationCount !== undefined 
+                ? data.locationCount 
+                : existingData.locationCount !== undefined 
+                  ? existingData.locationCount 
+                  : localStorage.getItem(DEMO_FORM_DATA_KEY) ? JSON.parse(localStorage.getItem(DEMO_FORM_DATA_KEY)!).locationCount : 1,
         lastUpdated: new Date()
       };
       
@@ -278,6 +284,21 @@ function saveDemoFormData(data: Partial<FormData>, combinedWithExisting: boolean
         console.error('Error: locationCount no se guardó correctamente', parsedData);
         // Corregir y guardar nuevamente
         parsedData.locationCount = data.locationCount ?? 1;
+        localStorage.setItem(DEMO_FORM_DATA_KEY, JSON.stringify(parsedData));
+      }
+      
+      // Verify contact information fields were saved correctly
+      const contactFields = ['contactName', 'phone', 'email', 'address', 'city', 'state', 'zipCode'];
+      const missingContactFields = contactFields.filter(field => 
+        data[field as keyof FormData] && !parsedData[field as keyof FormData]
+      );
+      
+      if (missingContactFields.length > 0) {
+        console.error('Error: campos de contacto no se guardaron correctamente:', missingContactFields, parsedData);
+        // Corregir y guardar nuevamente
+        missingContactFields.forEach(field => {
+          parsedData[field as keyof FormData] = data[field as keyof FormData];
+        });
         localStorage.setItem(DEMO_FORM_DATA_KEY, JSON.stringify(parsedData));
       }
     } catch (e) {
@@ -389,6 +410,14 @@ export const useFormProgress = () => {
               id: loc?.id || ''
             })) : [],
             
+            // Tips Policy data
+            tipsPolicy: state.tipsPolicy ? {
+              policyMode: state.tipsPolicy.policyMode || 'individual',
+              locationPolicies: state.tipsPolicy.locationPolicies || {},
+              groupPolicies: state.tipsPolicy.groupPolicies || {},
+              locationGroups: state.tipsPolicy.locationGroups || {}
+            } : undefined,
+            
             groups: Array.isArray(state.menuGroups) ? state.menuGroups.map(group => ({
               id: group?.name || 'default',
               name: group?.name || '',
@@ -396,7 +425,7 @@ export const useFormProgress = () => {
               nameConfirmed: true
             })) : [],
             
-            // Datos de contacto
+            // Datos de contacto - asegurar que todos los campos estén presentes
             contactName: state.contactInfo?.contactName || '',
             phone: state.contactInfo?.phone || '',
             email: state.contactInfo?.email || '',
@@ -461,6 +490,14 @@ export const useFormProgress = () => {
             id: loc?.id || ''
           })) : [],
           
+          // Tips Policy - Add complete tips policy data
+          tipsPolicy: state.tipsPolicy ? {
+            policyMode: state.tipsPolicy.policyMode || 'individual',
+            locationPolicies: state.tipsPolicy.locationPolicies || {},
+            groupPolicies: state.tipsPolicy.groupPolicies || {},
+            locationGroups: state.tipsPolicy.locationGroups || {}
+          } : undefined,
+          
           groups: Array.isArray(state.menuGroups) ? state.menuGroups.map(group => ({
             id: group?.name || 'default',
             name: group?.name || '',
@@ -468,7 +505,7 @@ export const useFormProgress = () => {
             nameConfirmed: true
           })) : [],
           
-          // Datos de contacto
+          // Datos de contacto - asegurar que todos los campos estén presentes
           contactName: state.contactInfo?.contactName || '',
           phone: state.contactInfo?.phone || '',
           email: state.contactInfo?.email || '',
@@ -517,7 +554,7 @@ export const useFormProgress = () => {
 
   // Function to refresh data without using context directly 
   const refreshData = async () => {
-    return await refreshFormData();
+    return await refreshFormDataWithUser(user);
   };
 
   // Función para guardar un campo específico
@@ -585,8 +622,8 @@ export const useFormProgress = () => {
     try {
       const userId = user ? getUserId(user) : null;
       if (formId === userId) {
-        // Use the standalone refreshFormData function
-        const refreshedData = await refreshFormData();
+        // Use the standalone refreshFormDataWithUser function
+        const refreshedData = await refreshFormDataWithUser(user);
         if (refreshedData) {
           setFormData(refreshedData);
         }

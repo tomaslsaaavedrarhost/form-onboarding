@@ -4,8 +4,9 @@ import { Formik, Form, Field, FormikProps } from 'formik'
 import * as Yup from 'yup'
 import { useForm } from '../context/FormContext'
 import { useTranslation } from '../hooks/useTranslation'
-import useFormProgress, { refreshFormData } from '../hooks/useFormProgress'
+import useFormProgress, { refreshFormDataWithUser } from '../hooks/useFormProgress'
 import { Notification } from '../components/Notification'
+import { useAuth } from '../lib/AuthContext'
 
 // Extender la interfaz Window para incluir saveCurrentFormData y validateCurrentStep
 declare global {
@@ -70,19 +71,23 @@ export default function AIConfig() {
   const navigate = useNavigate()
   const { state, dispatch } = useForm()
   const { t } = useTranslation()
-  const { saveFormData } = useFormProgress()
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [showSavePrompt, setShowSavePrompt] = useState(false)
-  const [showNotification, setShowNotification] = useState(false)
-  const [maxPersonalitiesError, setMaxPersonalitiesError] = useState(false)
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const formikRef = useRef<FormikProps<FormValues>>(null)
-  const [isInitializing, setIsInitializing] = useState(true)
-  const [initialFormValues, setInitialFormValues] = useState<FormValues | null>(null)
-  const saveTimeout = useRef<NodeJS.Timeout | undefined>(undefined)
-  const isFormInitialized = useRef(false)
-  // Flag to prevent context updates from triggering form changes
-  const skipFormUpdate = useRef(false)
+  const { user } = useAuth()
+  const { formData, updateField, saveFormData } = useFormProgress();
+  const [initialFormValues, setInitialFormValues] = useState<FormValues | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationType, setNotificationType] = useState<'success' | 'error'>('success');
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [maxPersonalitiesError, setMaxPersonalitiesError] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const formikRef = useRef<FormikProps<FormValues>>(null);
+  const isFormInitialized = useRef(false);
+  const skipFormUpdate = useRef(false);
+  const saveTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Ensure personality is always an array
   const ensureArray = (value: any): string[] => {
@@ -101,7 +106,7 @@ export default function AIConfig() {
       
       try {
         // Load data from localStorage or API
-        const loadedData = await refreshFormData();
+        const loadedData = await refreshFormDataWithUser(user);
         console.log("Loaded form data:", loadedData);
         
         let formValues: FormValues;
@@ -194,47 +199,65 @@ export default function AIConfig() {
   // Función para guardar directamente los datos del formulario sin depender del contexto
   const saveFormDataDirect = async (formValues: FormValues) => {
     try {
+      setIsSaving(true);
+      console.log("Guardando datos del formulario...");
+      
       // Convertir datos del formulario al formato que espera la API o localStorage
       const personalityArray = Array.isArray(formValues.personality) 
         ? formValues.personality 
         : [formValues.personality].filter(Boolean);
       
       // Construir el objeto con los datos actuales
-      const dataToSave = {
-        aiPreferences: {
-          language: formValues.language,
-          tone: personalityArray.join(','),
-          specialties: personalityArray,
-          assistantName: formValues.assistantName,
-          assistantGender: formValues.assistantGender,
-          otherPersonality: formValues.otherPersonality,
-          additionalInfo: formValues.additionalInfo
-        }
+      const aiConfigData = {
+        language: formValues.language,
+        otherLanguage: formValues.otherLanguage,
+        assistantName: formValues.assistantName,
+        assistantGender: formValues.assistantGender,
+        personality: personalityArray,
+        otherPersonality: formValues.otherPersonality,
+        additionalInfo: formValues.additionalInfo,
+        avatar: null
       };
       
       // Actualizar el contexto para mantener consistencia
       dispatch({
         type: 'SET_AI_CONFIG',
-        payload: {
-          language: formValues.language,
-          otherLanguage: formValues.otherLanguage,
-          assistantName: formValues.assistantName,
-          assistantGender: formValues.assistantGender,
-          personality: personalityArray,
-          otherPersonality: formValues.otherPersonality,
-          additionalInfo: formValues.additionalInfo,
-          avatar: null
-        }
+        payload: aiConfigData
       });
       
-      // Esperar un poco para asegurar que el dispatch se procese
-      await new Promise(res => setTimeout(res, 10));
+      // Preparar los datos para Firebase - cada campo individual
+      const updatePromises = [
+        updateField('language', formValues.language),
+        updateField('aiPreferences.language', formValues.language),
+        updateField('aiPreferences.assistantName', formValues.assistantName),
+        updateField('aiPreferences.assistantGender', formValues.assistantGender),
+        updateField('aiPreferences.specialties', personalityArray),
+        updateField('aiPreferences.tone', personalityArray.join(',')),
+        updateField('aiPreferences.otherPersonality', formValues.otherPersonality),
+        updateField('aiPreferences.additionalInfo', formValues.additionalInfo)
+      ];
       
-      // Guardar los datos
-      console.log("Saving form data directly:", dataToSave);
-      return await saveFormData();
+      // Esperar a que todas las actualizaciones se completen
+      await Promise.all(updatePromises);
+      
+      // Guardar todo el formulario para asegurar sincronización
+      await saveFormData();
+      
+      console.log("Datos guardados correctamente");
+      setHasUnsavedChanges(false);
+      setNotificationType('success');
+      setNotificationMessage('Configuración del asistente guardada correctamente');
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
+      setIsSaving(false);
+      
+      return true;
     } catch (error) {
       console.error("Error saving form data directly:", error);
+      setIsSaving(false);
+      setNotificationType('error');
+      setNotificationMessage('Error al guardar la configuración. Por favor, intenta nuevamente.');
+      setShowNotification(true);
       return false;
     }
   };
@@ -242,7 +265,8 @@ export default function AIConfig() {
   // Modificar la función handleFieldChange para actualizar SOLO el contexto
   const handleFieldChange = (field: string, value: any) => {
     // Marcar que tenemos cambios sin guardar
-    setHasUnsavedChanges(true)
+    setHasUnsavedChanges(true);
+    console.log("Cambios detectados en el campo:", field, "- hasUnsavedChanges:", true);
     
     // Actualizar SOLO el contexto (Formik ya se actualiza en los onChange)
     skipFormUpdate.current = true; // Prevenir que el cambio en el contexto afecte de vuelta al formulario
@@ -268,7 +292,8 @@ export default function AIConfig() {
     
     skipFormUpdate.current = false;
 
-    // Programar guardado automático
+    // Comentamos el guardado automático para que el usuario tenga que hacer clic en "Guardar cambios"
+    /*
     if (saveTimeout.current) {
       clearTimeout(saveTimeout.current)
     }
@@ -285,6 +310,7 @@ export default function AIConfig() {
         console.error('Error saving form data:', err);
       }
     }, 1000);
+    */
   }
 
   // Comunicar cambios al componente padre
@@ -352,20 +378,47 @@ export default function AIConfig() {
     };
   }, [validateForm]);
 
+  // Efecto para detectar cambios en el formulario
+  useEffect(() => {
+    // Exponer la función onFormStateChange para que otros componentes puedan notificar cambios
+    window.onFormStateChange = (hasChanges: boolean) => {
+      console.log("onFormStateChange llamado con:", hasChanges);
+      setHasUnsavedChanges(hasChanges);
+    };
+    
+    // Limpiar al desmontar
+    return () => {
+      window.onFormStateChange = undefined;
+      // Limpiar timeout si existe
+      if (saveTimeout.current) {
+        clearTimeout(saveTimeout.current);
+      }
+    };
+  }, []);
+
   // Reemplazar handleSave para usar la nueva función
   const handleSave = useCallback(async (values: FormValues) => {
+    if (!hasUnsavedChanges) {
+      console.log("No hay cambios sin guardar");
+      return true;
+    }
+    
+    console.log("Guardando configuración AI...");
     try {
-      console.log("Saving AI Config with values:", values);
       const success = await saveFormDataDirect(values);
-      setHasUnsavedChanges(false);
-      setShowNotification(true);
-      setTimeout(() => setShowNotification(false), 3000);
+      if (success) {
+        console.log("Configuración guardada correctamente");
+        setHasUnsavedChanges(false);
+      }
       return success;
     } catch (error) {
       console.error('Error al guardar:', error);
+      setNotificationType('error');
+      setNotificationMessage('Error al guardar la configuración. Por favor, intenta nuevamente.');
+      setShowNotification(true);
       return false;
     }
-  }, [dispatch, saveFormData]);
+  }, [hasUnsavedChanges]);
 
   // Exponer handleSave a través de window.saveCurrentFormData
   useEffect(() => {
@@ -384,22 +437,42 @@ export default function AIConfig() {
   }, [handleSave]);
 
   const handleNext = async (values: FormValues) => {
-    // Primero validar el formulario
-    if (!validateForm()) {
-      return;
-    }
-    
-    if (hasUnsavedChanges) {
-      // Save before navigating
-      const saveSuccess = await handleSave(values);
-      if (!saveSuccess) {
-        setShowSavePrompt(true);
+    try {
+      // Primero validar el formulario
+      if (!validateForm()) {
         return;
       }
+      
+      // Verificar si hay cambios sin guardar
+      if (hasUnsavedChanges) {
+        console.log("Hay cambios sin guardar, guardando antes de continuar...");
+        // Guardar antes de navegar
+        setIsSaving(true);
+        const saveSuccess = await saveFormDataDirect(values);
+        setIsSaving(false);
+        
+        if (!saveSuccess) {
+          console.log("Error al guardar, mostrando prompt de confirmación");
+          setShowSavePrompt(true);
+          return;
+        } else {
+          console.log("Guardado exitoso, continuando a la siguiente página");
+          setHasUnsavedChanges(false);
+        }
+      } else {
+        console.log("No hay cambios sin guardar, continuando a la siguiente página");
+      }
+      
+      // Navegar a la siguiente página
+      navigate('/onboarding/menu-config');
+    } catch (error) {
+      console.error('Error procesando la configuración de AI:', error);
+      setIsSaving(false);
+      setNotificationType('error');
+      setNotificationMessage('Error al procesar la configuración. Por favor, intenta nuevamente.');
+      setShowNotification(true);
     }
-    
-    navigate('/onboarding/menu-config');
-  }
+  };
 
   // Add a loading overlay while initializing or waiting for initial values
   if (isInitializing || !initialFormValues) {
@@ -458,8 +531,9 @@ export default function AIConfig() {
             <Form className="space-y-6">
               {showNotification && (
                 <Notification
-                  message="Los cambios han sido guardados correctamente"
+                  message={notificationMessage}
                   onClose={() => setShowNotification(false)}
+                  type={notificationType}
                 />
               )}
 
@@ -808,19 +882,21 @@ export default function AIConfig() {
                     <button
                       type="button"
                       onClick={() => handleSave(values)}
+                      disabled={isSaving}
                       className="px-6 py-3 border rounded-full flex items-center space-x-2 text-orange-600 border-orange-300 bg-orange-50 hover:bg-orange-100 transition-colors"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                       </svg>
-                      <span>Guardar cambios</span>
+                      <span>{isSaving ? 'Guardando...' : 'Guardar cambios'}</span>
                     </button>
                   )}
                   <button
                     type="submit"
+                    disabled={isSaving}
                     className="px-8 py-3 text-white bg-gradient-to-r from-orange-400 to-pink-500 rounded-full hover:opacity-90 transition-all duration-300 shadow-md flex items-center space-x-2"
                   >
-                    <span>Continuar</span>
+                    <span>{isSaving ? 'Guardando...' : 'Continuar'}</span>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                     </svg>

@@ -296,6 +296,17 @@ export default function TipsPolicy() {
     });
   };
 
+  // Ensure we also check formData for tips policy when initializing
+  useEffect(() => {
+    // If there's tip policy data in formData but not in state, initialize state from formData
+    if (formData.tipsPolicy && (!state.tipsPolicy || Object.keys(state.tipsPolicy).length === 0)) {
+      dispatch({
+        type: 'SET_TIPS_POLICY',
+        payload: formData.tipsPolicy
+      });
+    }
+  }, [formData, state.tipsPolicy, dispatch]);
+
   const initialValues: FormValues = {
     policyMode: state.tipsPolicy?.policyMode || 'individual',
     locationPolicies: ensureLocationPolicies(),
@@ -320,13 +331,39 @@ export default function TipsPolicy() {
     const locationPolicies: { [key: string]: PolicyObject } = {}
     values.locationPolicies.forEach(policy => {
       const { locationId, ...rest } = policy;
-      locationPolicies[locationId] = rest;
+      // Ensure all properties are included
+      locationPolicies[locationId] = {
+        hasTips: rest.hasTips || 'no',
+        tipDetails: rest.tipDetails || '',
+        hasServiceCharge: rest.hasServiceCharge || false,
+        serviceChargeDetails: rest.serviceChargeDetails || '',
+        tipDistribution: rest.tipDistribution || 'equal',
+        suggestedTipPercentages: rest.suggestedTipPercentages || [],
+        largeGroupPolicy: rest.largeGroupPolicy || 'no_policy',
+        largeGroupMinSize: rest.largeGroupMinSize || 8,
+        largeGroupTipPercentage: rest.largeGroupTipPercentage || 18,
+        eventCateringPolicy: rest.eventCateringPolicy || '',
+        cardVsCashPolicy: rest.cardVsCashPolicy || ''
+      };
     })
 
     const groupPolicies: { [key: string]: PolicyObject } = {}
     values.groupPolicies.forEach(policy => {
       const { groupId, ...rest } = policy;
-      groupPolicies[groupId] = rest;
+      // Ensure all properties are included
+      groupPolicies[groupId] = {
+        hasTips: rest.hasTips || 'no',
+        tipDetails: rest.tipDetails || '',
+        hasServiceCharge: rest.hasServiceCharge || false,
+        serviceChargeDetails: rest.serviceChargeDetails || '',
+        tipDistribution: rest.tipDistribution || 'equal',
+        suggestedTipPercentages: rest.suggestedTipPercentages || [],
+        largeGroupPolicy: rest.largeGroupPolicy || 'no_policy',
+        largeGroupMinSize: rest.largeGroupMinSize || 8,
+        largeGroupTipPercentage: rest.largeGroupTipPercentage || 18,
+        eventCateringPolicy: rest.eventCateringPolicy || '',
+        cardVsCashPolicy: rest.cardVsCashPolicy || ''
+      };
     })
 
     dispatch({
@@ -376,13 +413,39 @@ export default function TipsPolicy() {
       const locationPolicies: { [key: string]: PolicyObject } = {}
       values.locationPolicies.forEach(policy => {
         const { locationId, ...rest } = policy;
-        locationPolicies[locationId] = rest;
+        // Ensure all properties are included
+        locationPolicies[locationId] = {
+          hasTips: rest.hasTips || 'no',
+          tipDetails: rest.tipDetails || '',
+          hasServiceCharge: rest.hasServiceCharge || false,
+          serviceChargeDetails: rest.serviceChargeDetails || '',
+          tipDistribution: rest.tipDistribution || 'equal',
+          suggestedTipPercentages: rest.suggestedTipPercentages || [],
+          largeGroupPolicy: rest.largeGroupPolicy || 'no_policy',
+          largeGroupMinSize: rest.largeGroupMinSize || 8,
+          largeGroupTipPercentage: rest.largeGroupTipPercentage || 18,
+          eventCateringPolicy: rest.eventCateringPolicy || '',
+          cardVsCashPolicy: rest.cardVsCashPolicy || ''
+        };
       })
 
       const groupPolicies: { [key: string]: PolicyObject } = {}
       values.groupPolicies.forEach(policy => {
         const { groupId, ...rest } = policy;
-        groupPolicies[groupId] = rest;
+        // Ensure all properties are included
+        groupPolicies[groupId] = {
+          hasTips: rest.hasTips || 'no',
+          tipDetails: rest.tipDetails || '',
+          hasServiceCharge: rest.hasServiceCharge || false,
+          serviceChargeDetails: rest.serviceChargeDetails || '',
+          tipDistribution: rest.tipDistribution || 'equal',
+          suggestedTipPercentages: rest.suggestedTipPercentages || [],
+          largeGroupPolicy: rest.largeGroupPolicy || 'no_policy',
+          largeGroupMinSize: rest.largeGroupMinSize || 8,
+          largeGroupTipPercentage: rest.largeGroupTipPercentage || 18,
+          eventCateringPolicy: rest.eventCateringPolicy || '',
+          cardVsCashPolicy: rest.cardVsCashPolicy || ''
+        };
       })
 
       dispatch({

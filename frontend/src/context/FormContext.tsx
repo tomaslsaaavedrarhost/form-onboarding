@@ -70,6 +70,13 @@ interface TipsPolicy {
       tipDetails: string
       hasServiceCharge: boolean
       serviceChargeDetails: string
+      tipDistribution: string
+      suggestedTipPercentages: string[]
+      largeGroupPolicy: string
+      largeGroupMinSize: number
+      largeGroupTipPercentage: number
+      eventCateringPolicy: string
+      cardVsCashPolicy: string
     }
   }
   groupPolicies: {
@@ -78,6 +85,13 @@ interface TipsPolicy {
       tipDetails: string
       hasServiceCharge: boolean
       serviceChargeDetails: string
+      tipDistribution: string
+      suggestedTipPercentages: string[]
+      largeGroupPolicy: string
+      largeGroupMinSize: number
+      largeGroupTipPercentage: number
+      eventCateringPolicy: string
+      cardVsCashPolicy: string
     }
   }
   locationGroups: { [key: string]: string[] } // Mapa de groupId -> array de locationIds

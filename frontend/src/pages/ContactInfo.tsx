@@ -5,6 +5,7 @@ import { useFormProgress } from '../hooks/useFormProgress'
 import { Formik, Form, Field, ErrorMessage, FormikProps } from 'formik'
 import * as Yup from 'yup'
 import { FormData } from '../hooks/useFormProgress'
+import { useForm } from '../context/FormContext'
 
 interface FormValues {
   contactName: string
@@ -28,7 +29,7 @@ const validationSchema = Yup.object().shape({
 })
 
 // Componente de notificación personalizado
-const Notification = ({ message, onClose }: { message: string; onClose: () => void }) => {
+const Notification = ({ message, onClose, type = 'success' }: { message: string; onClose: () => void; type?: 'success' | 'error' }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -36,14 +37,22 @@ const Notification = ({ message, onClose }: { message: string; onClose: () => vo
     return () => clearTimeout(timer);
   }, [onClose]);
 
+  const isSuccess = type === 'success';
+
   return (
     <div className="fixed top-4 right-4 z-50 animate-fade-in">
-      <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4 flex items-center space-x-3">
+      <div className={`bg-white rounded-lg shadow-lg border ${isSuccess ? 'border-green-200' : 'border-red-200'} p-4 flex items-center space-x-3`}>
         <div className="flex-shrink-0">
-          <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+          <div className={`w-8 h-8 rounded-full ${isSuccess ? 'bg-gradient-brand' : 'bg-red-500'} flex items-center justify-center`}>
+            {isSuccess ? (
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
           </div>
         </div>
         <p className="text-gray-800">{message}</p>
@@ -73,22 +82,70 @@ export default function ContactInfo() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { formData, updateField, saveFormData } = useFormProgress()
+  const formContext = useForm();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
+  const [notificationType, setNotificationType] = useState<'success' | 'error'>('success')
+  const [notificationMessage, setNotificationMessage] = useState('')
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const formikRef = useRef<FormikProps<FormValues>>(null)
-  const [localData, setLocalData] = useState<FormValues>({
-    contactName: formData.contactName || '',
-    phone: formData.phone || '',
-    email: formData.email || '',
-    address: formData.address || '',
-    city: formData.city || '',
-    state: formData.state || '',
-    zipCode: formData.zipCode || '',
-    sameForAllLocations: formData.sameForAllLocations ?? false,
-  })
+  
+  // Initialize local data with either flat fields from formData or nested fields from formContext
+  const [localData, setLocalData] = useState<FormValues>(() => {
+    // First try to get from flat fields (Firebase)
+    const flatData = {
+      contactName: formData.contactName || '',
+      phone: formData.phone || '',
+      email: formData.email || '',
+      address: formData.address || '',
+      city: formData.city || '',
+      state: formData.state || '',
+      zipCode: formData.zipCode || '',
+      sameForAllLocations: formData.sameForAllLocations ?? false,
+    };
+    
+    // Then try to fill gaps from contactInfo nested object (FormContext)
+    const nestedData = formContext.state.contactInfo || {};
+    
+    // Return merged data, prioritizing flat fields
+    return {
+      contactName: flatData.contactName || nestedData.contactName || '',
+      phone: flatData.phone || nestedData.phone || '',
+      email: flatData.email || nestedData.email || '',
+      address: flatData.address || nestedData.address || '',
+      city: flatData.city || nestedData.city || '',
+      state: flatData.state || nestedData.state || '',
+      zipCode: flatData.zipCode || nestedData.zipCode || '',
+      sameForAllLocations: flatData.sameForAllLocations ?? nestedData.sameForAllLocations ?? false,
+    };
+  });
+
+  // Log data on mount and formData changes
+  useEffect(() => {
+    console.log("ContactInfo: formData from useFormProgress:", formData);
+    console.log("ContactInfo: contactInfo from FormContext:", formContext.state.contactInfo);
+  }, [formData, formContext.state.contactInfo]);
+
+  // Debug log
+  useEffect(() => {
+    // Verify data structure on mount
+    if (formData) {
+      console.log("Verificando estructura de datos en ContactInfo:");
+      console.log("- Flat fields:", {
+        contactName: formData.contactName,
+        phone: formData.phone,
+        email: formData.email,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        zipCode: formData.zipCode,
+        sameForAllLocations: formData.sameForAllLocations
+      });
+      console.log("- FormContext contactInfo:", formContext.state.contactInfo);
+    }
+  }, [formData, formContext.state.contactInfo]);
 
   // Helper function to get business name with fallback
   const getBusinessName = () => formData.legalBusinessName || 'tu empresa';
@@ -114,9 +171,38 @@ export default function ContactInfo() {
     );
 
     if (hasChanges) {
+      console.log('Actualizando datos locales desde formData:', newData);
       setLocalData(newData);
       setHasUnsavedChanges(false);
     }
+  }, [formData]);
+
+  // Función para detectar cambios en el formulario
+  const detectFormChanges = useCallback((currentValues: FormValues) => {
+    // Comparar con los datos originales de formData
+    const originalData = {
+      contactName: formData.contactName || '',
+      phone: formData.phone || '',
+      email: formData.email || '',
+      address: formData.address || '',
+      city: formData.city || '',
+      state: formData.state || '',
+      zipCode: formData.zipCode || '',
+      sameForAllLocations: formData.sameForAllLocations ?? false,
+    };
+    
+    // Verificar si hay cambios comparando cada campo
+    const changedFields = Object.entries(currentValues).filter(
+      ([key, value]) => originalData[key as keyof FormValues] !== value
+    );
+    
+    const hasChanges = changedFields.length > 0;
+    
+    if (hasChanges) {
+      console.log('Cambios detectados en los campos:', changedFields.map(([key]) => key));
+    }
+    
+    return hasChanges;
   }, [formData]);
 
   // Comunicar cambios al componente padre
@@ -127,9 +213,25 @@ export default function ContactInfo() {
   }, [hasUnsavedChanges]);
 
   const handleFieldChange = (field: keyof FormValues, value: any) => {
-    setHasUnsavedChanges(true)
-    setLocalData(prev => ({ ...prev, [field]: value }))
-    updateField(field, value)
+    // Actualizar datos locales
+    const updatedData = { ...localData, [field]: value };
+    setLocalData(updatedData);
+    
+    // Detectar si hay cambios reales comparando con los datos originales
+    const hasChanges = detectFormChanges(updatedData);
+    setHasUnsavedChanges(hasChanges);
+    
+    // Actualizar el campo tanto como flat field (para Firebase) y en el objeto contactInfo
+    updateField(field, value);
+    
+    // También actualizar en el contexto del formulario para mantener sincronizado
+    formContext.dispatch({
+      type: 'SET_CONTACT_INFO',
+      payload: {
+        ...formContext.state.contactInfo,
+        [field]: value
+      }
+    });
   }
 
   // Función de validación que se expone globalmente
@@ -192,18 +294,74 @@ export default function ContactInfo() {
     };
   }, [validateForm]);
 
-  const handleNext = (values: FormValues) => {
-    // Primero validar el formulario
-    if (!validateForm()) {
-      return;
+  const handleNext = async (values: FormValues) => {
+    try {
+      // Primero validar el formulario
+      if (!validateForm()) {
+        return;
+      }
+      
+      // Verificar si hay cambios comparando con los datos originales
+      const hasChanges = detectFormChanges(values);
+      
+      if (!hasChanges) {
+        console.log('No se detectaron cambios en el formulario, continuando sin guardar');
+        navigate('/onboarding/location-details');
+        return;
+      }
+      
+      console.log('Se detectaron cambios en el formulario, guardando...');
+      setIsSaving(true);
+      
+      // Preparar los datos de contacto asegurando que todos los campos estén presentes
+      const contactData = {
+        contactName: values.contactName.trim(),
+        phone: values.phone.trim(),
+        email: values.email.trim(),
+        address: values.address.trim(),
+        city: values.city.trim(),
+        state: values.state.trim(),
+        zipCode: values.zipCode.trim(),
+        sameForAllLocations: values.sameForAllLocations
+      };
+      
+      // Actualizar el FormContext con los datos de contacto
+      formContext.dispatch({
+        type: 'SET_CONTACT_INFO',
+        payload: contactData
+      });
+      
+      // Actualizar cada campo en Firebase
+      const updatePromises = Object.entries(contactData).map(([field, value]) => {
+        return updateField(field, value);
+      });
+      
+      // Esperar a que todas las actualizaciones se completen
+      await Promise.all(updatePromises);
+      
+      // Guardar todo el formulario para asegurar sincronización
+      await saveFormData();
+      
+      console.log('Datos de contacto guardados correctamente');
+      setHasUnsavedChanges(false);
+      setNotificationType('success');
+      setNotificationMessage('Datos guardados correctamente');
+      setShowNotification(true);
+      
+      // Navegar a la siguiente página después de un breve retraso para que el usuario vea la notificación
+      setTimeout(() => {
+        setIsSaving(false);
+        navigate('/onboarding/location-details');
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error al guardar datos de contacto:', error);
+      setIsSaving(false);
+      setNotificationType('error');
+      setNotificationMessage('Error al guardar los datos de contacto. Por favor, intenta nuevamente.');
+      setShowNotification(true);
     }
-    
-    if (hasUnsavedChanges) {
-      setShowSavePrompt(true)
-    } else {
-      navigate('/onboarding/location-details')
-    }
-  }
+  };
 
   const handleSave = useCallback(async () => {
     if (!hasUnsavedChanges) return true;
@@ -215,12 +373,17 @@ export default function ContactInfo() {
       await saveFormData();
       setHasUnsavedChanges(false);
       setShowNotification(true);
+      setNotificationType('success');
+      setNotificationMessage('Los cambios han sido guardados correctamente');
       setTimeout(() => setShowNotification(false), 3000);
       setIsSaving(false);
       return true;
     } catch (error) {
       console.error("Error al guardar cambios:", error);
       setIsSaving(false);
+      setShowNotification(true);
+      setNotificationType('error');
+      setNotificationMessage('Error al guardar cambios. Por favor, intenta nuevamente.');
       return false;
     }
   }, [saveFormData, hasUnsavedChanges]);
@@ -279,8 +442,9 @@ export default function ContactInfo() {
     <div className="max-w-5xl mx-auto p-6">
       {showNotification && (
         <Notification
-          message="Los cambios han sido guardados correctamente"
+          message={notificationMessage}
           onClose={() => setShowNotification(false)}
+          type={notificationType}
         />
       )}
       <SavePrompt />
@@ -493,57 +657,43 @@ export default function ContactInfo() {
               </div>
 
               {/* Nueva barra de botones fixed en estilo consistente con otros pasos */}
-              <div className="fixed bottom-0 left-0 right-0 bg-white py-4 shadow-lg border-t border-gray-200 z-50">
-                <div className="container mx-auto px-6 max-w-5xl flex justify-between">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/onboarding/legal-data')}
-                    className="px-6 py-3 bg-white border border-gray-300 rounded-full text-gray-700 hover:bg-gray-50 transition flex items-center space-x-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                    <span>Atrás</span>
-                  </button>
-                  
-                  <div className="flex space-x-4">
-                    {hasUnsavedChanges && (
+              <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => navigate('/onboarding/legal-data')}
+                  className="btn-secondary"
+                >
+                  Atrás
+                </button>
+                
+                <div className="flex items-center">
+                  {hasUnsavedChanges && (
+                    <>
+                      <span className="text-orange-500 mr-4 flex items-center">
+                        <svg className="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zm-1 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
+                        Cambios sin guardar
+                      </span>
+                      
                       <button
                         type="button"
                         onClick={handleSave}
-                        disabled={isSaving || !hasUnsavedChanges}
-                        className="px-6 py-3 border rounded-full flex items-center space-x-2 text-orange-600 border-orange-300 bg-orange-50 hover:bg-orange-100 transition-colors"
+                        disabled={isSaving}
+                        className="mr-4 px-4 py-2 bg-orange-100 text-orange-700 border border-orange-300 rounded-md hover:bg-orange-200 transition-colors"
                       >
-                        {isSaving ? (
-                          <>
-                            <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            <span>Guardando...</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                            </svg>
-                            <span>Guardar cambios</span>
-                          </>
-                        )}
+                        {isSaving ? 'Guardando...' : 'Guardar cambios'}
                       </button>
-                    )}
-                    
-                    <button
-                      type="submit"
-                      disabled={!isValid || isSaving}
-                      className="px-8 py-3 text-white bg-gradient-to-r from-orange-400 to-pink-500 rounded-full hover:opacity-90 transition-all duration-300 shadow-md flex items-center space-x-2"
-                    >
-                      <span>Continuar</span>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                      </svg>
-                    </button>
-                  </div>
+                    </>
+                  )}
+                  
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? 'Guardando...' : 'Continuar'}
+                  </button>
                 </div>
               </div>
             </Form>

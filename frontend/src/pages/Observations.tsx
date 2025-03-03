@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFormProgress, FormData } from '../hooks/useFormProgress'
 import { useTranslation } from '../hooks/useTranslation'
@@ -6,6 +6,7 @@ import { Formik, Form, Field, FormikProps } from 'formik'
 import * as Yup from 'yup'
 import FormActions from '../components/FormActions'
 import { Notification } from '../components/Notification'
+import { useForm } from '../context/FormContext'
 
 // Extender la interfaz Window para incluir saveCurrentFormData
 declare global {
@@ -29,31 +30,18 @@ export default function Observations() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { formData, updateField, saveFormData } = useFormProgress()
+  const { dispatch, state: formContextState } = useForm()
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showSavePrompt, setShowSavePrompt] = useState(false)
   const [showNotification, setShowNotification] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
+  const formikRef = useRef<FormikProps<FormValues> | null>(null)
 
   const initialValues: FormValues = {
     additionalNotes: formData.additionalNotes || '',
     termsAccepted: formData.termsAccepted || false,
   }
-
-  // Añadir este nuevo useEffect para mantener sincronizados los valores
-  const [localValues, setLocalValues] = useState<FormValues>(initialValues);
-
-  // Sincronizar con formData cuando cambie o se recargue la página
-  useEffect(() => {
-    if (!formData) return;
-    
-    console.log("FormData en Observations:", formData);
-    console.log("AdditionalNotes:", formData.additionalNotes);
-    
-    // Actualizar los valores locales cuando formData cambia
-    setLocalValues({
-      additionalNotes: formData.additionalNotes || '',
-      termsAccepted: formData.termsAccepted || false,
-    });
-  }, [formData]);
 
   // Comunicar cambios al componente padre
   useEffect(() => {
@@ -62,87 +50,150 @@ export default function Observations() {
     }
   }, [hasUnsavedChanges]);
 
+  // Simplificar el handleFieldChange para evitar ciclos
   const handleFieldChange = (field: keyof FormData, value: any) => {
-    setHasUnsavedChanges(true)
-    updateField(field, value)
+    console.log(`Field changed: ${field} = ${value}`);
+    setHasUnsavedChanges(true);
+    
+    // Update form data
+    updateField(field, value);
+    
+    // Update FormContext directly
+    if (field === 'additionalNotes') {
+      dispatch({
+        type: 'SET_ADDITIONAL_NOTES',
+        payload: value
+      });
+    } else if (field === 'termsAccepted') {
+      dispatch({
+        type: 'SET_TERMS_ACCEPTED',
+        payload: value
+      });
+    }
   }
 
-  const handleSave = useCallback(async (values: FormValues) => {
+  // Simplificar el handleSave para garantizar que isSaving se restablezca
+  const handleSave = async (values: FormValues) => {
+    if (isSaving) return false; // Prevenir múltiples llamadas simultáneas
+    
     try {
-      console.log("Guardando valores:", values);
+      console.log("Guardando valores en Observations:", values);
+      setIsSaving(true);
       
-      // Actualizar cada campo individualmente
+      // First, update the FormContext directly
+      dispatch({
+        type: 'SET_ADDITIONAL_NOTES',
+        payload: values.additionalNotes
+      });
+      
+      dispatch({
+        type: 'SET_TERMS_ACCEPTED',
+        payload: values.termsAccepted
+      });
+      
+      // Then update each field individually in the form data
       Object.entries(values).forEach(([key, value]) => {
         updateField(key as keyof FormData, value);
       });
       
-      // Guardar los cambios en la base de datos
+      // Save the changes to the database
       const success = await saveFormData();
       
+      console.log("Resultado de guardar:", success ? "exitoso" : "fallido");
+      
       if (success) {
-        console.log("Guardado exitoso");
-        // Actualizar también el estado local para mantener sincronización
-        setLocalValues(values);
         setHasUnsavedChanges(false);
         setShowNotification(true);
         setTimeout(() => setShowNotification(false), 3000);
-        return true;
-      } else {
-        console.error("Error al guardar los datos");
-        return false;
       }
+      
+      return success;
     } catch (error) {
-      console.error("Error en handleSave:", error);
+      console.error("Error en handleSave de Observations:", error);
       return false;
+    } finally {
+      // Garantizar que isSaving siempre se restablezca, incluso en caso de error
+      setIsSaving(false);
     }
-  }, [updateField, saveFormData, setLocalValues]);
+  };
 
   // Actualizar el useEffect de window.saveCurrentFormData
   useEffect(() => {
     window.saveCurrentFormData = async () => {
-      try {
-        console.log("Ejecutando saveCurrentFormData");
-        
-        // Obtenemos los valores actuales del formulario
-        const formikContext = document.querySelector('form')?.getAttribute('data-formik-values');
-        if (!formikContext) {
-          console.error('No se encontró el contexto de Formik');
-          
-          // Si no podemos obtener los valores del formulario, usar los valores locales actuales
-          console.log("Usando valores locales:", localValues);
-          return await handleSave(localValues);
-        }
-        
-        const values = JSON.parse(formikContext);
-        console.log("Valores obtenidos del formulario:", values);
-        
-        // Llamamos a handleSave con los valores actuales
+      if (formikRef.current) {
+        const values = formikRef.current.values;
         return await handleSave(values);
-      } catch (e) {
-        console.error('Error en saveCurrentFormData:', e);
-        return false;
       }
+      return false;
     };
     
     return () => {
       window.saveCurrentFormData = undefined;
     };
-  }, [handleSave, localValues]);
+  }, []);  // Sin dependencias para evitar recreaciones
 
+  // Add a verification function to check if data is saved correctly
+  const verifyDataSaved = (values: FormValues) => {
+    // Check if the values match in FormContext
+    const formContextMatch = 
+      formContextState.additionalNotes === values.additionalNotes &&
+      formContextState.termsAccepted === values.termsAccepted;
+    
+    // Check if the values match in formData
+    const formDataMatch = 
+      formData.additionalNotes === values.additionalNotes &&
+      formData.termsAccepted === values.termsAccepted;
+    
+    console.log("Data verification before navigation:");
+    console.log("- FormContext match:", formContextMatch);
+    console.log("- FormData match:", formDataMatch);
+    
+    return formContextMatch && formDataMatch;
+  };
+
+  // Modify the handleSubmit function to include loading state
   const handleSubmit = (values: FormValues) => {
     if (hasUnsavedChanges) {
-      setShowSavePrompt(true)
+      setShowSavePrompt(true);
     } else {
-      (Object.entries(values) as [keyof FormData, any][]).forEach(([field, value]) => {
-        updateField(field, value)
-      })
-      navigate('/onboarding/review')
+      setIsNavigating(true);
+      
+      // Just navigate, no need to update values if there are no changes
+      setTimeout(() => {
+        navigate('/onboarding/review');
+      }, 100);
     }
   }
 
-  // Componente para el modal de confirmación
+  // Modify the SavePrompt component to include loading states
   const SavePrompt = () => {
-    if (!showSavePrompt) return null
+    if (!showSavePrompt) return null;
+
+    // Función para navegar directamente
+    const handleNavigateWithoutSaving = () => {
+      setShowSavePrompt(false);
+      navigate('/onboarding/review');
+    };
+
+    // Función para guardar y luego navegar
+    const handleSaveAndNavigate = async () => {
+      if (isSaving) return; // Evitar múltiples ejecuciones
+      
+      try {
+        if (formikRef.current) {
+          const success = await handleSave(formikRef.current.values);
+          if (success) {
+            setShowSavePrompt(false);
+            navigate('/onboarding/review');
+          }
+        }
+      } catch (e) {
+        console.error('Error al guardar los datos:', e);
+        // Navigate anyway to prevent being stuck
+        setShowSavePrompt(false);
+        navigate('/onboarding/review');
+      }
+    };
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -155,36 +206,31 @@ export default function Observations() {
           </p>
           <div className="flex justify-end space-x-4">
             <button
-              onClick={() => {
-                setShowSavePrompt(false)
-                navigate('/onboarding/review')
-              }}
-              className="btn-secondary"
+              onClick={handleNavigateWithoutSaving}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              disabled={isSaving}
             >
               Continuar sin guardar
             </button>
             <button
-              onClick={async () => {
-                try {
-                  // Usamos directamente los valores actuales del formulario desde formData
-                  const success = await saveFormData();
-                  if (success) {
-                    setShowSavePrompt(false);
-                    setHasUnsavedChanges(false);
-                    navigate('/onboarding/review');
-                  }
-                } catch (e) {
-                  console.error('Error al guardar los datos:', e);
-                }
-              }}
-              className="btn-primary"
+              onClick={handleSaveAndNavigate}
+              className="px-4 py-2 bg-brand-orange text-white rounded-md hover:bg-brand-orange-dark"
+              disabled={isSaving}
             >
-              Guardar y continuar
+              {isSaving ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Guardando...
+                </span>
+              ) : 'Guardar y continuar'}
             </button>
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -209,13 +255,14 @@ export default function Observations() {
         <SavePrompt />
         
         <Formik
-          initialValues={localValues}
+          initialValues={initialValues}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
           enableReinitialize={true}
+          innerRef={(formik) => { formikRef.current = formik; }}
         >
           {(formikProps: FormikProps<FormValues>) => (
-            <Form className="space-y-6" data-formik-values={JSON.stringify(formikProps.values)}>
+            <Form className="space-y-6">
               
               {/* Comentarios Adicionales */}
               <div className="bg-white shadow rounded-lg overflow-hidden relative p-6">
@@ -310,6 +357,7 @@ export default function Observations() {
                 </div>
               </div>
 
+              {/* Barra fija de botones en la parte inferior */}
               <div className="fixed bottom-0 left-0 right-0 py-4 px-6 bg-white border-t border-gray-200 flex justify-between items-center z-10">
                 {!hasUnsavedChanges ? (
                   <div className="flex items-center bg-green-50 border border-green-100 rounded-md px-4 py-3">
@@ -325,31 +373,43 @@ export default function Observations() {
                   <button
                     type="button"
                     onClick={() => navigate('/onboarding/tips-policy')}
-                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-colors"
+                    className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-full hover:bg-gray-50 transition-colors flex items-center space-x-2"
+                    disabled={isSaving}
                   >
-                    Atrás
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    <span>Atrás</span>
                   </button>
                 )}
 
                 <div className="flex space-x-4">
-                  {hasUnsavedChanges ? (
+                  {hasUnsavedChanges && (
                     <button
                       type="button"
-                      onClick={() => handleSave(formikProps.values)}
-                      className="px-6 py-3 border border-brand-orange text-brand-orange font-medium rounded-full hover:bg-orange-50 transition-colors"
+                      onClick={() => {
+                        if (formikRef.current) {
+                          handleSave(formikRef.current.values);
+                        }
+                      }}
+                      disabled={isSaving}
+                      className="px-6 py-3 border rounded-full flex items-center space-x-2 text-orange-600 border-orange-300 bg-orange-50 hover:bg-orange-100 transition-colors"
                     >
-                      Guardar cambios
-                    </button>
-                  ) : (
-                    <button disabled className="px-6 py-3 bg-gray-100 text-gray-500 font-medium rounded-full">
-                      Cambios guardados
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                      </svg>
+                      <span>{isSaving ? 'Guardando...' : 'Guardar cambios'}</span>
                     </button>
                   )}
-                  <button 
+                  <button
                     type="submit"
-                    className="px-6 py-3 bg-gradient-to-r from-brand-orange to-brand-purple text-white font-medium rounded-full hover:opacity-90 transition-colors"
+                    disabled={isSaving}
+                    className="px-8 py-3 text-white bg-gradient-to-r from-orange-400 to-pink-500 rounded-full hover:opacity-90 transition-all duration-300 shadow-md flex items-center space-x-2"
                   >
-                    Continuar
+                    <span>{isNavigating ? 'Continuando...' : 'Continuar'}</span>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
                   </button>
                 </div>
               </div>
