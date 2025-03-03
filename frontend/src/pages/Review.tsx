@@ -16,6 +16,7 @@ interface ExtendedFormData extends FormData {
   
   // Políticas de propinas a nivel de proyecto
   tipsPolicy?: {
+    policyMode: 'individual' | 'single' | 'grouped';
     locationPolicies: {
       [locationId: string]: {
         hasTips: 'yes' | 'no' | 'depends';
@@ -31,6 +32,22 @@ interface ExtendedFormData extends FormData {
         cardVsCashPolicy: string;
       };
     };
+    groupPolicies: {
+      [groupId: string]: {
+        hasTips: 'yes' | 'no' | 'depends';
+        tipDetails: string;
+        hasServiceCharge: boolean;
+        serviceChargeDetails: string;
+        tipDistribution: string;
+        suggestedTipPercentages: string[];
+        largeGroupPolicy: string;
+        largeGroupMinSize: number;
+        largeGroupTipPercentage: number;
+        eventCateringPolicy: string;
+        cardVsCashPolicy: string;
+      };
+    };
+    locationGroups: { [key: string]: string[] };
   };
   
   // Campos específicos para la información legal y datos de ubicación
